@@ -78,7 +78,7 @@ func (c *systemCommand) run(message string) bool {
 }
 
 func (c *systemCommand) print(message string) {
-	fmt.Printf("%s%s\n", c.chat.prompt.cli, message)
+	fmt.Printf("%s%s\n\n", c.chat.prompt.cli, message)
 }
 
 type geminiCommand struct {
@@ -161,7 +161,7 @@ func (g *geminiCommand) runStreaming(message string) {
 		}
 	}
 
-	fmt.Print("\n")
+	fmt.Print("\n\n")
 }
 
 func (g *geminiCommand) printFlush(message string) {

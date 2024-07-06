@@ -56,32 +56,32 @@ func newPromptColor() *promtColor {
 }
 
 func newPrompt(currentUser string) *prompt {
-	// fmt.Println("newPrompt.")
+	fmt.Println("")
 
-	maxLength := maxLength(currentUser, geminiUser, cliUser)
+	// maxLength := (currentUser, geminiUser, cliUser)
 	pc := newPromptColor()
 
 	return &prompt{
-		user:     pc.user(buildPrompt(currentUser, maxLength)),
-		userNext: pc.user(buildPrompt(strings.Repeat(" ", len(currentUser)), maxLength)),
-		gemini:   pc.gemini(buildPrompt(geminiUser, maxLength)),
-		cli:      pc.cli(buildPrompt(cliUser, maxLength)),
+		user:     pc.user(buildPrompt(currentUser)),
+		userNext: pc.user(buildPrompt(strings.Repeat(" ", len(currentUser)))),
+		gemini:   pc.gemini(buildPrompt(geminiUser)),
+		cli:      pc.cli(buildPrompt(cliUser)),
 	}
 }
 
-func maxLength(str ...string) int {
-	var maxLength int
-	for _, s := range str {
-		length := len(s)
-		if maxLength < length {
-			maxLength = length
-		}
-	}
-	return maxLength
-}
+// func maxLength(str ...string) int {
+// 	var maxLength int
+// 	for _, s := range str {
+// 		length := len(s)
+// 		if maxLength < length {
+// 			maxLength = length
+// 		}
+// 	}
+// 	return maxLength
+// }
 
-func buildPrompt(user string, length int) string {
-	return fmt.Sprintf("%s>%s", user, strings.Repeat(" ", length-len(user)+1))
+func buildPrompt(user string) string {
+	return fmt.Sprintf("%s> ", user)
 }
 
 // Red adds red color to str in terminal.
