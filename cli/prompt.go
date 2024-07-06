@@ -56,7 +56,7 @@ func newPromptColor() *promtColor {
 }
 
 func newPrompt(currentUser string) *prompt {
-	fmt.Println("")
+	// fmt.Println("")
 
 	// maxLength := (currentUser, geminiUser, cliUser)
 	pc := newPromptColor()

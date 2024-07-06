@@ -36,7 +36,7 @@ func NewChatCommand() *cobra.Command {
 }
 
 func startChat(cmd *cobra.Command, arg []string) error {
-	// fmt.Println("starting Chat..")
+	fmt.Println("\nInitiating a new Chat Session..")
 
 	// var opts ChatOpts
 	// if err := cmd.Flags().Parse(&opts); err != nil {
