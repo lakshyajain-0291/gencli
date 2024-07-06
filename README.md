@@ -46,6 +46,23 @@ A gemini powered interactable CLI tool that keeps record of all your files and c
 - **Toggle Format**: `$tf` - Toggle response formatting (Markdown).
 - **Set Style**: `$st <style>` - Set the formatting style (ascii, dark, light, pink, notty, dracula).
 
+### CLI chat -help
+```bash
+
+.\gencli.exe chat -h
+Starts a new chat session
+
+Usage:
+  gencli chat [flags]
+
+Flags:
+  -f, --format         render markdown-formatted response (default true)
+  -h, --help           help for chat
+  -m, --multiline      read input as a multi-line string
+  -s, --style string   markdown format style (ascii, dark, light, pink, notty, dracula) (default "auto")
+  -t, --term string    multi-line input terminator (default "~")
+
+```
 ## Contributing
 
 Contributions are welcome! Fork the repository and submit a pull request.
