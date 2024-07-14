@@ -2,41 +2,26 @@ module gemini_cli_tool
 
 go 1.22.5
 
-require github.com/spf13/cobra v1.8.1
+require (
+	github.com/dslipak/pdf v0.0.2
+	github.com/spf13/cobra v1.8.1
+)
 
 require (
 	github.com/alecthomas/chroma/v2 v2.8.0 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/aymerick/douceur v0.2.0 // indirect
-	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dlclark/regexp2 v1.4.0 // indirect
-	github.com/dslipak/pdf v0.0.2 // indirect
-	github.com/gabriel-vasile/mimetype v1.4.3 // indirect
 	github.com/gorilla/css v1.0.0 // indirect
-	github.com/hhrutter/lzw v1.0.0 // indirect
-	github.com/hhrutter/tiff v1.0.1 // indirect
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
 	github.com/mattn/go-isatty v0.0.18 // indirect
 	github.com/mattn/go-runewidth v0.0.15 // indirect
 	github.com/microcosm-cc/bluemonday v1.0.25 // indirect
 	github.com/muesli/reflow v0.3.0 // indirect
 	github.com/olekukonko/tablewriter v0.0.5 // indirect
-	github.com/pdfcpu/pdfcpu v0.8.0 // indirect
-	github.com/pkg/errors v0.9.1 // indirect
-	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
-	github.com/sirupsen/logrus v1.9.3 // indirect
-	github.com/stretchr/testify v1.9.0 // indirect
-	github.com/unidoc/pkcs7 v0.2.0 // indirect
-	github.com/unidoc/timestamp v0.0.0-20200412005513-91597fd3793a // indirect
-	github.com/unidoc/unipdf/v3 v3.60.0 // indirect
-	github.com/unidoc/unitype v0.4.0 // indirect
 	github.com/yuin/goldmark v1.5.4 // indirect
 	github.com/yuin/goldmark-emoji v1.0.2 // indirect
-	golang.org/x/image v0.18.0 // indirect
-	golang.org/x/xerrors v0.0.0-20231012003039-104605ab7028 // indirect
-	gopkg.in/yaml.v2 v2.4.0 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
 require (
@@ -57,7 +42,7 @@ require (
 	github.com/google/s2a-go v0.1.7 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.2 // indirect
-	github.com/googleapis/gax-go/v2 v2.12.5 // indirect
+	github.com/googleapis/gax-go/v2 v2.12.5
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/muesli/termenv v0.15.2
 	github.com/spf13/pflag v1.0.5 // indirect
