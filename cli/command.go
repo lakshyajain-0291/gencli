@@ -1,30 +1,70 @@
 package cli
 
 import (
-	"context"
-	"fmt"
-
-	// "gemini_cli_tool/cli"
-	"gemini_cli_tool/gemini"
-	"os/user"
-
 	"github.com/spf13/cobra"
 )
 
-type ChatOpts struct {
-	Format     bool
-	Style      string
-	Multiline  bool
-	Terminator string
+var opts setupOpts
+
+func NewConfigCommand() *cobra.Command {
+	var directories []string
+	var skipTypes []string
+	var skipFiles []string
+	var relevanceIndex float32
+
+	cmd := &cobra.Command{
+		Use:   "config",
+		Short: "Set configurations for the indexing",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return setConfig(directories, skipTypes, skipFiles, relevanceIndex)
+		},
+	}
+
+	cmd.Flags().StringSliceVarP(&directories, "directories", "d", []string{}, "List of directories to index")
+	cmd.Flags().StringSliceVarP(&skipTypes, "skiptypes", "t", []string{}, "List of file types to skip during indexing")
+	cmd.Flags().StringSliceVarP(&skipFiles, "skipfiles", "f", []string{}, "List of directories to index")
+	cmd.Flags().Float32VarP(&relevanceIndex, "relativeindex", "r", 0.8, "Relevance Value used during Indexing")
+
+	return cmd
 }
 
-var opts ChatOpts
+func NewIndexCommand() *cobra.Command {
 
-func NewChatCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "chat",
-		Short: "Starts a new chat session",
-		RunE:  startChat,
+		Use:   "index",
+		Short: "Index files in the configured directories",
+		RunE:  indexFilesCmd,
+	}
+
+	return cmd
+}
+
+func NewSearchCommand() *cobra.Command {
+
+	var allFileDisplay bool
+
+	cmd := &cobra.Command{
+		Use:   "search",
+		Short: "Search files based on the provided query.",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if allFileDisplay {
+				return displayAllFiles()
+			} else {
+				return searchFilesCmd(cmd, args)
+			}
+		},
+	}
+
+	cmd.Flags().BoolVarP(&allFileDisplay, "all", "a", false, "Display Name and Description of All Indexed files")
+
+	return cmd
+}
+
+func NewSetupCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "setup",
+		Short: "Starts a new setup session",
+		RunE:  startsetup,
 	}
 
 	cmd.Flags().BoolVarP(&opts.Format, "format", "f", true, "render markdown-formatted response")
@@ -33,44 +73,4 @@ func NewChatCommand() *cobra.Command {
 	cmd.Flags().StringVarP(&opts.Terminator, "term", "t", "~", "multi-line input terminator")
 
 	return cmd
-}
-
-func startChat(cmd *cobra.Command, arg []string) error {
-	// fmt.Println("starting Chat..")
-
-	// var opts ChatOpts
-	// if err := cmd.Flags().Parse(&opts); err != nil {
-	// 	return fmt.Errorf("failed to parse flags: %w", err)
-	// }
-
-	// fmt.Printf("Chat options: %+v\n", opts)
-
-	// fmt.Println("Initializing chat session with Gemini API...")
-	chatSession, err := gemini.NewChatSession(context.Background())
-	if err != nil {
-		// return err
-		return fmt.Errorf("failed to initialize chat session: %w", err)
-	}
-
-	chat, err := NewChat(getCurrentUser(), chatSession, &opts)
-	if err != nil {
-		// return err
-		return fmt.Errorf("failed to create chat instance: %w", err)
-	}
-
-	// fmt.Println("Starting chat interface...")
-	chat.Start()
-
-	// fmt.Println("Closing chat session...")
-	chatSession.Close()
-
-	return nil
-}
-
-func getCurrentUser() string {
-	currentUser, err := user.Current()
-	if err != nil {
-		return "user"
-	}
-	return currentUser.Username
 }
