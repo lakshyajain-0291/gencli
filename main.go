@@ -27,9 +27,10 @@ func run() int {
 	}
 
 	// These functions need to written :
-	// rootCmd.AddCommand(cmd.NewIndexCommand())
-	// rootCmd.AddCommand(cmd.NewSearchCommand())
-	rootCmd.AddCommand(cli.NewChatCommand())
+	rootCmd.AddCommand(cli.NewConfigCommand())
+	rootCmd.AddCommand(cli.NewIndexCommand())
+	rootCmd.AddCommand(cli.NewSearchCommand())
+	rootCmd.AddCommand(cli.NewSetupCommand())
 
 	err := rootCmd.Execute()
 	if err != nil {
