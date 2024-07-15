@@ -18,33 +18,74 @@ import (
 	"github.com/google/generative-ai-go/genai"
 )
 
+func timeOut(duration time.Duration, fn func() (string, error)) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), duration)
+	defer cancel()
+
+	ch := make(chan struct {
+		desc string
+		err  error
+	}, 1)
+
+	go func() {
+		desc, err := fn()
+		ch <- struct {
+			desc string
+			err  error
+		}{desc, err}
+	}()
+
+	select {
+	case result := <-ch:
+		return result.desc, result.err
+	case <-ctx.Done():
+		return "No description", ctx.Err()
+	}
+}
+
 func GenerateDescription(file fileinfo.FileInfo) (string, error) {
 
 	ctx := context.Background()
 
 	session, err := NewsetupSession(ctx)
 	if err != nil {
-		return "", fmt.Errorf("failed to start new setup session with gemini : %w", err)
+		return "No description", fmt.Errorf("failed to start new setup session with gemini : %w", err)
 	}
-
 	filePath := filepath.Join(file.Directory, file.Name)
 
 	mimeType := mime.TypeByExtension(filepath.Ext(filePath))
 
 	// fmt.Printf("\nmimeType : %s \n", mimeType)
 
+	var descriptionFunc func() (string, error)
+
 	switch {
 	case strings.HasPrefix(mimeType, "text/"):
-		return handleTextFile(session, filePath)
+		descriptionFunc = func() (string, error) {
+			return handleTextFile(session, file)
+		}
 	case strings.HasSuffix(mimeType, "/pdf"):
-		return handlePdfFile(session, filePath)
+		descriptionFunc = func() (string, error) {
+			return handlePdfFile(session, file)
+		}
 	case strings.HasPrefix(mimeType, "image/"):
-		return handleImageFile(session, filePath)
+		descriptionFunc = func() (string, error) {
+			return handleImageFile(session, file)
+		}
 	case strings.HasPrefix(mimeType, "video/"):
-		return handleVideoFile(session, filePath)
+		descriptionFunc = func() (string, error) {
+			return handleVideoFile(session, file)
+		}
 	default:
 		return getDefaultDesc(session, file)
 	}
+
+	description, err := timeOut(20*time.Second, descriptionFunc)
+	if err != nil {
+		return getDefaultDesc(session, file)
+	}
+
+	return description, nil
 }
 
 func getDefaultDesc(session *Session, file fileinfo.FileInfo) (string, error) {
@@ -56,7 +97,7 @@ func getDefaultDesc(session *Session, file fileinfo.FileInfo) (string, error) {
 
 	resp, err := model.GenerateContent(session.ctx, prompt...)
 	if err != nil {
-		return "", err
+		return "No description", err
 	}
 
 	if len(resp.Candidates) > 0 && resp.Candidates[0].Content != nil {
@@ -70,15 +111,17 @@ func getDefaultDesc(session *Session, file fileinfo.FileInfo) (string, error) {
 		return builder.String(), nil
 	}
 
-	return "", fmt.Errorf("no description generated")
+	return "No description", fmt.Errorf("no description generated")
 
 }
 
-func handleTextFile(session *Session, filePath string) (string, error) {
+func handleTextFile(session *Session, file fileinfo.FileInfo) (string, error) {
+
+	filePath := filepath.Join(file.Directory, file.Name)
 
 	content, err := os.ReadFile(filePath)
 	if err != nil {
-		return "", err
+		return getDefaultDesc(session, file)
 	}
 
 	model := session.client.GenerativeModel("gemini-1.5-pro")
@@ -88,7 +131,7 @@ func handleTextFile(session *Session, filePath string) (string, error) {
 
 	resp, err := model.GenerateContent(session.ctx, prompt...)
 	if err != nil {
-		return "", err
+		return getDefaultDesc(session, file)
 	}
 
 	if len(resp.Candidates) > 0 && resp.Candidates[0].Content != nil {
@@ -102,18 +145,20 @@ func handleTextFile(session *Session, filePath string) (string, error) {
 		return builder.String(), nil
 	}
 
-	return "", fmt.Errorf("no description generated")
+	return getDefaultDesc(session, file)
 }
 
-func handlePdfFile(session *Session, filePath string) (string, error) {
+func handlePdfFile(session *Session, file fileinfo.FileInfo) (string, error) {
+	filePath := filepath.Join(file.Directory, file.Name)
+
 	r, err := pdf.Open(filePath)
 	if err != nil {
-		return "", err
+		return getDefaultDesc(session, file)
 	}
 	var buf bytes.Buffer
 	b, err := r.GetPlainText()
 	if err != nil {
-		return "", err
+		return getDefaultDesc(session, file)
 	}
 	buf.ReadFrom(b)
 	content := buf.String()
@@ -125,7 +170,7 @@ func handlePdfFile(session *Session, filePath string) (string, error) {
 
 	resp, err := model.GenerateContent(session.ctx, prompt...)
 	if err != nil {
-		return "", err
+		return getDefaultDesc(session, file)
 	}
 
 	if len(resp.Candidates) > 0 && resp.Candidates[0].Content != nil {
@@ -139,15 +184,17 @@ func handlePdfFile(session *Session, filePath string) (string, error) {
 		return builder.String(), nil
 	}
 
-	return "", fmt.Errorf("no description generated")
+	return getDefaultDesc(session, file)
 
 }
 
-func handleImageFile(session *Session, filePath string) (string, error) {
+func handleImageFile(session *Session, file fileinfo.FileInfo) (string, error) {
+
+	filePath := filepath.Join(file.Directory, file.Name)
 
 	f, err := os.Open(filePath)
 	if err != nil {
-		return "", fmt.Errorf("failed to open the file : %w", err)
+		return getDefaultDesc(session, file)
 	}
 
 	//setting a display name
@@ -156,13 +203,13 @@ func handleImageFile(session *Session, filePath string) (string, error) {
 	//Uploaded file to gemini
 	img, err := session.client.UploadFile(session.ctx, "", f, &opts)
 	if err != nil {
-		return "", err
+		return getDefaultDesc(session, file)
 	}
 
 	//Got metadata of the uploaded file
 	uploadedFile, err := session.client.GetFile(session.ctx, img.Name)
 	if err != nil {
-		return "", err
+		return getDefaultDesc(session, file)
 	}
 
 	model := session.client.GenerativeModel("gemini-1.5-pro")
@@ -173,7 +220,7 @@ func handleImageFile(session *Session, filePath string) (string, error) {
 
 	resp, err := model.GenerateContent(session.ctx, prompt...)
 	if err != nil {
-		return "", err
+		return getDefaultDesc(session, file)
 	}
 
 	if len(resp.Candidates) > 0 && resp.Candidates[0].Content != nil {
@@ -187,13 +234,15 @@ func handleImageFile(session *Session, filePath string) (string, error) {
 		return builder.String(), nil
 	}
 
-	return "", fmt.Errorf("no description generated")
+	return getDefaultDesc(session, file)
 }
 
-func handleVideoFile(session *Session, filePath string) (string, error) {
+func handleVideoFile(session *Session, file fileinfo.FileInfo) (string, error) {
+	filePath := filepath.Join(file.Directory, file.Name)
+
 	f, err := os.Open(filePath)
 	if err != nil {
-		return "", fmt.Errorf("failed to open the file : %w", err)
+		return getDefaultDesc(session, file)
 	}
 
 	//setting a display name
@@ -202,7 +251,7 @@ func handleVideoFile(session *Session, filePath string) (string, error) {
 	//Uploaded file to gemini
 	vid, err := session.client.UploadFile(session.ctx, "", f, &opts)
 	if err != nil {
-		return "", err
+		return getDefaultDesc(session, file)
 	}
 
 	const maxRetries = 20
@@ -213,7 +262,7 @@ func handleVideoFile(session *Session, filePath string) (string, error) {
 
 		uploadedFile, err := session.client.GetFile(session.ctx, vid.Name)
 		if err != nil {
-			return "", err
+			return getDefaultDesc(session, file)
 		}
 
 		// fmt.Printf("state : %v", uploadedFile.State)
@@ -227,7 +276,7 @@ func handleVideoFile(session *Session, filePath string) (string, error) {
 
 			resp, err := model.GenerateContent(session.ctx, prompt...)
 			if err != nil {
-				return "", err
+				return getDefaultDesc(session, file)
 			}
 
 			if len(resp.Candidates) > 0 && resp.Candidates[0].Content != nil {
@@ -241,14 +290,14 @@ func handleVideoFile(session *Session, filePath string) (string, error) {
 				return builder.String(), nil
 			}
 
-			return "", fmt.Errorf("no description generated")
+			return getDefaultDesc(session, file)
 		}
 
 		delay := time.Duration(math.Pow(2, float64(i))) * baseDelay
 		time.Sleep(delay)
 	}
 
-	return "", fmt.Errorf("file %s is not in an ACTIVE state after %d retries", vid.Name, maxRetries)
+	return getDefaultDesc(session, file)
 
 }
 
