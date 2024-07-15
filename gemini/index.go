@@ -31,7 +31,7 @@ func GenerateDescription(file fileinfo.FileInfo) (string, error) {
 
 	mimeType := mime.TypeByExtension(filepath.Ext(filePath))
 
-	fmt.Printf("\nmimeType : %s \n", mimeType)
+	// fmt.Printf("\nmimeType : %s \n", mimeType)
 
 	switch {
 	case strings.HasPrefix(mimeType, "text/"):
@@ -216,7 +216,7 @@ func handleVideoFile(session *Session, filePath string) (string, error) {
 			return "", err
 		}
 
-		fmt.Printf("state : %v", uploadedFile.State)
+		// fmt.Printf("state : %v", uploadedFile.State)
 		if uploadedFile.State == 2 {
 
 			model := session.client.GenerativeModel("gemini-1.5-pro")

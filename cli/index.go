@@ -44,7 +44,7 @@ func indexFiles() error {
 		return fmt.Errorf("failed to load config : %w", err)
 	}
 
-	var files []fileinfo.FileInfo
+	files, err := LoadIndex()
 
 	i := 0
 	for _, dir := range config.Directories {
@@ -111,8 +111,8 @@ func indexFiles() error {
 			}
 		}
 
-		fmt.Printf("\n\nFile Name : %s \n", file.Name)
-		fmt.Printf("\nDescription : %s \n", description)
+		// fmt.Printf("\n\nFile Name : %s \n", file.Name)
+		// fmt.Printf("\nDescription : %s \n", description)
 
 		embedding, err := gemini.GenerateEmbeddings(description)
 		if err != nil {
@@ -156,7 +156,7 @@ func retryWithBackoff(operation func() error) error {
 		}
 		// fmt.Printf("\n%d\n", err.(*apierror.APIError).HTTPCode())
 		if apiErr, ok := err.(*apierror.APIError); ok {
-			fmt.Printf("\n||Attempt no : %d||\n", attempt)
+			// fmt.Printf("\n||Attempt no : %d||\n", attempt)
 			if apiErr.HTTPCode() == http.StatusTooManyRequests {
 				delay := time.Duration(math.Pow(2, float64(attempt))) * baseDelay
 				time.Sleep(delay)
