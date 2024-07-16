@@ -6,51 +6,98 @@ import (
 	"fmt"
 	"math"
 	"mime"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"gemini_cli_tool/fileinfo"
 
 	"github.com/dslipak/pdf"
+	"github.com/googleapis/gax-go/v2/apierror"
 
 	"github.com/google/generative-ai-go/genai"
 )
 
-func timeOut(duration time.Duration, fn func() (string, error)) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), duration)
-	defer cancel()
+const (
+	maxRetries            = 20
+	baseDelay             = 100 * time.Millisecond
+	maxConcurrentRequests = 15
+	maxTokensPerRequest   = 1000000
+	maxFilesPerBatch      = 10
+)
 
-	ch := make(chan struct {
-		desc string
-		err  error
-	}, 1)
-
-	go func() {
-		desc, err := fn()
-		ch <- struct {
-			desc string
-			err  error
-		}{desc, err}
-	}()
-
-	select {
-	case result := <-ch:
-		return result.desc, result.err
-	case <-ctx.Done():
-		return "No description", ctx.Err()
-	}
-}
-
-func GenerateDescription(file fileinfo.FileInfo) (string, error) {
+func GenerateDescriptions(files []fileinfo.FileInfo) []fileinfo.FileInfo {
 
 	ctx := context.Background()
-
 	session, err := NewsetupSession(ctx)
 	if err != nil {
-		return "No description", fmt.Errorf("failed to start new setup session with gemini : %w", err)
+		fmt.Println("Failed to start new setup session with Gemini:", err)
+		return files
 	}
+
+	fileCh := make(chan fileinfo.FileInfo, len(files))
+	resultCh := make(chan fileinfo.FileInfo, len(files))
+
+	for _, file := range files {
+		fileCh <- file
+	}
+	close(fileCh)
+
+	var wg sync.WaitGroup
+	fmt.Println("Starting concurrent processing with", maxConcurrentRequests, "goroutines")
+
+	for i := 0; i < maxConcurrentRequests; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			fmt.Printf("Goroutine %d started\n", id)
+			for file := range fileCh {
+				fmt.Printf("Goroutine %d processing file: %s\n", id, file.Name)
+				var err error
+				file.Description, err = GenerateDescription(session, file)
+				if err != nil {
+					// fmt.Printf("%w", err.(*apierror.APIError))
+					if apiErr, ok := err.(*apierror.APIError); ok {
+						// fmt.Printf("\n||%d", apiErr.HTTPCode())
+						if apiErr.HTTPCode() == http.StatusTooManyRequests {
+							err = retryWithBackoff(func() error {
+								var retryErr error
+								file.Description, retryErr = GenerateDescription(session, file)
+								return retryErr
+							})
+
+							if err != nil {
+								file.Description = "nil"
+							}
+						} else {
+							file.Description = "nil"
+						}
+					} else {
+						file.Description = "nil"
+					}
+				}
+				resultCh <- file
+			}
+			fmt.Printf("Goroutine %d finished\n", id)
+		}(i)
+	}
+
+	wg.Wait()
+	close(resultCh)
+	fmt.Println("All goroutines have finished processing")
+
+	var processedFiles []fileinfo.FileInfo
+	for file := range resultCh {
+		processedFiles = append(processedFiles, file)
+	}
+	return processedFiles
+}
+
+func GenerateDescription(session *Session, file fileinfo.FileInfo) (string, error) {
+
 	filePath := filepath.Join(file.Directory, file.Name)
 
 	mimeType := mime.TypeByExtension(filepath.Ext(filePath))
@@ -80,7 +127,7 @@ func GenerateDescription(file fileinfo.FileInfo) (string, error) {
 		return getDefaultDesc(session, file)
 	}
 
-	description, err := timeOut(20*time.Second, descriptionFunc)
+	description, err := timeOut(30*time.Second, descriptionFunc)
 	if err != nil {
 		return getDefaultDesc(session, file)
 	}
@@ -88,9 +135,34 @@ func GenerateDescription(file fileinfo.FileInfo) (string, error) {
 	return description, nil
 }
 
+func timeOut(duration time.Duration, fn func() (string, error)) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), duration)
+	defer cancel()
+
+	ch := make(chan struct {
+		desc string
+		err  error
+	}, 1)
+
+	go func() {
+		desc, err := fn()
+		ch <- struct {
+			desc string
+			err  error
+		}{desc, err}
+	}()
+
+	select {
+	case result := <-ch:
+		return result.desc, result.err
+	case <-ctx.Done():
+		return "No description", ctx.Err()
+	}
+}
+
 func getDefaultDesc(session *Session, file fileinfo.FileInfo) (string, error) {
 
-	model := session.client.GenerativeModel("gemini-1.5-pro")
+	model := session.client.GenerativeModel("gemini-1.5-flash")
 	prompt := []genai.Part{
 		genai.Text(fmt.Sprintf("Generate a description in less than 100 words about what this file is and what is it about, based on the meta data given : \n\nFile Name : %s\nFile Directory : %s\nFile Size : %d\nFile Modified Time : %v", file.Name, file.Directory, file.Size, file.ModifiedTime)),
 	}
@@ -124,7 +196,7 @@ func handleTextFile(session *Session, file fileinfo.FileInfo) (string, error) {
 		return getDefaultDesc(session, file)
 	}
 
-	model := session.client.GenerativeModel("gemini-1.5-pro")
+	model := session.client.GenerativeModel("gemini-1.5-flash")
 	prompt := []genai.Part{
 		genai.Text(fmt.Sprintf("Generate a description in less than 100 words about what this file is and what is it about, based on the given content : \n\n%s", string(content))),
 	}
@@ -163,7 +235,7 @@ func handlePdfFile(session *Session, file fileinfo.FileInfo) (string, error) {
 	buf.ReadFrom(b)
 	content := buf.String()
 
-	model := session.client.GenerativeModel("gemini-1.5-pro")
+	model := session.client.GenerativeModel("gemini-1.5-flash")
 	prompt := []genai.Part{
 		genai.Text(fmt.Sprintf("Generate a description in less than 100 words about what this file is and what is it about, based on the given content : \n\n%s", content)),
 	}
@@ -212,7 +284,7 @@ func handleImageFile(session *Session, file fileinfo.FileInfo) (string, error) {
 		return getDefaultDesc(session, file)
 	}
 
-	model := session.client.GenerativeModel("gemini-1.5-pro")
+	model := session.client.GenerativeModel("gemini-1.5-flash")
 	prompt := []genai.Part{
 		genai.FileData{URI: uploadedFile.URI},
 		genai.Text(fmt.Sprintf("Generate a description in less than 100 words about what this file %s is and what is it about ", filepath.Base(filePath))),
@@ -248,74 +320,171 @@ func handleVideoFile(session *Session, file fileinfo.FileInfo) (string, error) {
 	//setting a display name
 	opts := genai.UploadFileOptions{DisplayName: filepath.Base(filePath)}
 
+	fmt.Print("uplaoding file..", file.Name, "\n")
 	//Uploaded file to gemini
 	vid, err := session.client.UploadFile(session.ctx, "", f, &opts)
 	if err != nil {
 		return getDefaultDesc(session, file)
 	}
+	fmt.Print("uplaoded file..", file.Name, "\n")
 
-	const maxRetries = 20
-	const baseDelay = 10 * time.Millisecond
+	// const baseDelay = 10 * time.Millisecond
 
-	for i := 0; i < maxRetries; i++ {
-		// Get metadata of the uploaded file
+	// Get metadata of the uploaded file
 
-		uploadedFile, err := session.client.GetFile(session.ctx, vid.Name)
+	uploadedFile, err := session.client.GetFile(session.ctx, vid.Name)
+	if err != nil {
+		return getDefaultDesc(session, file)
+	}
+
+	for uploadedFile.State == genai.FileStateProcessing {
+		fmt.Print(".")
+		// Sleep for 10 seconds
+		time.Sleep(10 * time.Second)
+
+		// Fetch the file from the API again.
+		uploadedFile, err = session.client.GetFile(session.ctx, file.Name)
+		if err != nil {
+			return getDefaultDesc(session, file)
+		}
+	}
+
+	// fmt.Printf("state : %v", uploadedFile.State)
+	if uploadedFile.State == 2 {
+
+		model := session.client.GenerativeModel("gemini-1.5-flash")
+		prompt := []genai.Part{
+			genai.FileData{URI: uploadedFile.URI},
+			genai.Text(fmt.Sprintf("Generate a description in less than 100 words about what this file is and what is it about, based on the first 7 seconds of the video file %s ", filepath.Base(filePath))),
+		}
+
+		resp, err := model.GenerateContent(session.ctx, prompt...)
 		if err != nil {
 			return getDefaultDesc(session, file)
 		}
 
-		// fmt.Printf("state : %v", uploadedFile.State)
-		if uploadedFile.State == 2 {
+		if len(resp.Candidates) > 0 && resp.Candidates[0].Content != nil {
+			var builder strings.Builder
 
-			model := session.client.GenerativeModel("gemini-1.5-pro")
-			prompt := []genai.Part{
-				genai.FileData{URI: uploadedFile.URI},
-				genai.Text(fmt.Sprintf("Generate a description in less than 100 words about what this file is and what is it about, based on the first 7 seconds of the video file %s ", filepath.Base(filePath))),
-			}
-
-			resp, err := model.GenerateContent(session.ctx, prompt...)
-			if err != nil {
-				return getDefaultDesc(session, file)
-			}
-
-			if len(resp.Candidates) > 0 && resp.Candidates[0].Content != nil {
-				var builder strings.Builder
-
-				for _, candidate := range resp.Candidates {
-					for _, part := range candidate.Content.Parts {
-						builder.WriteString(fmt.Sprintf("%s", part))
-					}
+			for _, candidate := range resp.Candidates {
+				for _, part := range candidate.Content.Parts {
+					builder.WriteString(fmt.Sprintf("%s", part))
 				}
-				return builder.String(), nil
 			}
-
-			return getDefaultDesc(session, file)
+			return builder.String(), nil
 		}
 
-		delay := time.Duration(math.Pow(2, float64(i))) * baseDelay
-		time.Sleep(delay)
+		return getDefaultDesc(session, file)
 	}
 
 	return getDefaultDesc(session, file)
 
 }
 
-func GenerateEmbeddings(desc string) ([]float32, error) {
+func GenerateEmbeddings(files []fileinfo.FileInfo) []fileinfo.FileInfo {
+
 	ctx := context.Background()
 
-	setupSession, err := NewsetupSession(ctx)
+	session, err := NewsetupSession(ctx)
 	if err != nil {
-		return nil, err
+		fmt.Println("Failed to start new setup session with Gemini:", err)
+		return files
 	}
 
+	fileCh := make(chan fileinfo.FileInfo, len(files))
+	resultCh := make(chan fileinfo.FileInfo, len(files))
+
+	for _, file := range files {
+		fileCh <- file
+	}
+	close(fileCh)
+
+	var wg sync.WaitGroup
+	const maxConcurrentRequests = 10
+	// fmt.Println("Starting concurrent processing with", maxConcurrentRequests, "goroutines")
+
+	for i := 0; i < maxConcurrentRequests; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			// fmt.Printf("Goroutine %d started\n", id)
+
+			for file := range fileCh {
+				// fmt.Printf("Goroutine %d processing file: %s\n", id, file.Name)
+
+				var err error
+				file.Embedding, err = GenerateEmbedding(session, file.Description)
+				if err != nil {
+					// fmt.Printf("%w", err.(*apierror.APIError))
+					if apiErr, ok := err.(*apierror.APIError); ok {
+						// fmt.Printf("\n||%d", apiErr.HTTPCode())
+						if apiErr.HTTPCode() == http.StatusTooManyRequests {
+							err = retryWithBackoff(func() error {
+								var retryErr error
+								file.Embedding, retryErr = GenerateEmbedding(session, file.Description)
+								return retryErr
+							})
+
+							if err != nil {
+								file.Embedding = nil
+							}
+						} else {
+							file.Embedding = nil
+						}
+					} else {
+						file.Embedding = nil
+					}
+				}
+				resultCh <- file
+			}
+			// fmt.Printf("Goroutine %d finished\n", id)
+		}()
+	}
+
+	wg.Wait()
+	close(resultCh)
+	fmt.Println("All goroutines have finished processing")
+
+	var processedFiles []fileinfo.FileInfo
+	for file := range resultCh {
+		processedFiles = append(processedFiles, file)
+	}
+	return processedFiles
+}
+
+func GenerateEmbedding(setupSession *Session, desc string) ([]float32, error) {
+
 	em := setupSession.client.EmbeddingModel("text-embedding-004")
-	embeddingResult, err := em.EmbedContent(ctx, genai.Text(desc))
+	embeddingResult, err := em.EmbedContent(setupSession.ctx, genai.Text(desc))
 	if err != nil {
 		return nil, err
 	}
 
 	// fmt.Println(embeddingResult.Embedding.Values)
 	return embeddingResult.Embedding.Values, nil
+
+}
+
+func retryWithBackoff(operation func() error) error {
+	var err error
+
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		err := operation()
+		if err == nil {
+			return nil //success
+		}
+		// fmt.Printf("\n%d\n", err.(*apierror.APIError).HTTPCode())
+		if apiErr, ok := err.(*apierror.APIError); ok {
+			fmt.Printf("\n||Attempt no : %d||\n", attempt)
+			if apiErr.HTTPCode() == http.StatusTooManyRequests {
+				delay := time.Duration(math.Pow(2, float64(attempt))) * baseDelay
+				time.Sleep(delay)
+				continue
+			}
+		}
+		break
+	}
+
+	return fmt.Errorf("operation failed after %d attempts : %w", maxRetries+1, err)
 
 }
