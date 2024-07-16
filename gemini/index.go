@@ -22,10 +22,10 @@ import (
 )
 
 const (
-	maxRetries            = 20
+	maxRetries            = 10
 	baseDelay             = 100 * time.Millisecond
 	maxConcurrentRequests = 15
-	maxTokensPerRequest   = 1000000
+	maxTokensPerRequest   = 900000
 	maxFilesPerBatch      = 10
 )
 
@@ -38,11 +38,39 @@ func GenerateDescriptions(files []fileinfo.FileInfo) []fileinfo.FileInfo {
 		return files
 	}
 
-	fileCh := make(chan fileinfo.FileInfo, len(files))
+	// fileCh := make(chan fileinfo.FileInfo, len(files))
+	fileCh := make(chan []fileinfo.FileInfo, len(files)/maxFilesPerBatch+1)
 	resultCh := make(chan fileinfo.FileInfo, len(files))
 
+	var batch []fileinfo.FileInfo
+	var currentTokens int
+
 	for _, file := range files {
-		fileCh <- file
+		prompt, err := GeneratePrompt(session, &file)
+		if err != nil {
+			continue
+		}
+
+		model := session.client.GenerativeModel("gemini-1.5-flash")
+		respToken, err := model.CountTokens(session.ctx, prompt...)
+		if err != nil {
+			return nil
+		}
+
+		tokens := respToken.TotalTokens
+		fmt.Printf("Tokens for desc of %s is %d\n", file.Name, respToken.TotalTokens)
+
+		if currentTokens+int(tokens) > maxTokensPerRequest || len(batch) >= maxFilesPerBatch {
+			fileCh <- batch
+			batch = []fileinfo.FileInfo{}
+			currentTokens = 0
+		}
+		batch = append(batch, file)
+		currentTokens += int(tokens)
+
+	}
+	if len(batch) > 0 {
+		fileCh <- batch
 	}
 	close(fileCh)
 
@@ -54,10 +82,10 @@ func GenerateDescriptions(files []fileinfo.FileInfo) []fileinfo.FileInfo {
 		go func(id int) {
 			defer wg.Done()
 			fmt.Printf("Goroutine %d started\n", id)
-			for file := range fileCh {
-				fmt.Printf("Goroutine %d processing file: %s\n", id, file.Name)
+			for batch := range fileCh {
+				fmt.Printf("Goroutine %d processing batch", id)
 				var err error
-				file.Description, err = GenerateDescription(session, &file)
+				resultBatch, err := GenerateBatchDescription(session, batch)
 				if err != nil {
 					// fmt.Printf("%w", err.(*apierror.APIError))
 					if apiErr, ok := err.(*apierror.APIError); ok {
@@ -65,21 +93,31 @@ func GenerateDescriptions(files []fileinfo.FileInfo) []fileinfo.FileInfo {
 						if apiErr.HTTPCode() == http.StatusTooManyRequests {
 							err = retryWithBackoff(func() error {
 								var retryErr error
-								file.Description, retryErr = GenerateDescription(session, &file)
+								resultBatch, retryErr = GenerateBatchDescription(session, batch)
 								return retryErr
 							})
 
 							if err != nil {
-								file.Description = "nil"
+								for _, file := range batch {
+									file.Description = "nil"
+									resultCh <- file
+								}
+								continue
 							}
-						} else {
-							file.Description = "nil"
+
 						}
-					} else {
-						file.Description = "nil"
 					}
+					for _, file := range batch {
+						file.Description = "nil"
+						resultCh <- file
+					}
+					continue
 				}
-				resultCh <- file
+
+				for i, file := range batch {
+					file.Description = resultBatch[i].Description
+					resultCh <- file
+				}
 			}
 			fmt.Printf("Goroutine %d finished\n", id)
 		}(i)
@@ -96,7 +134,56 @@ func GenerateDescriptions(files []fileinfo.FileInfo) []fileinfo.FileInfo {
 	return processedFiles
 }
 
-func GenerateDescription(session *Session, file *fileinfo.FileInfo) (string, error) {
+func GenerateBatchDescription(session *Session, batch []fileinfo.FileInfo) ([]fileinfo.FileInfo, error) {
+	model := session.client.GenerativeModel("gemini-1.5-flash")
+	var prompts []genai.Part
+
+	for _, file := range batch {
+		prompt, err := GeneratePrompt(session, &file)
+		if err != nil {
+			return nil, err
+		}
+
+		prompts = append(prompts, prompt...)
+	}
+
+	fmt.Println("Sending combined prompts to Gemini")
+	resp, err := model.GenerateContent(session.ctx, prompts...)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(resp.Candidates) > 0 && resp.Candidates[0].Content != nil {
+		var currentFileIndex int
+		var builder strings.Builder
+
+		for _, candidate := range resp.Candidates {
+			lines := strings.Split(fmt.Sprintf("%s", candidate.Content.Parts[0]), "\n")
+			fmt.Printf("Processing candidate with %d lines\n", len(lines))
+
+			for _, line := range lines {
+				if strings.HasPrefix(line, "File: ") {
+					if currentFileIndex < len(batch) {
+						fmt.Printf("Updating description for file: %s\n", batch[currentFileIndex].Name)
+						batch[currentFileIndex].Description = builder.String()
+						builder.Reset()
+						currentFileIndex++
+					}
+				} else {
+					builder.WriteString(line + "\n")
+				}
+			}
+			if currentFileIndex < len(batch) {
+				fmt.Printf("Finalizing description for file: %s\n", batch[currentFileIndex].Name)
+				batch[currentFileIndex].Description = builder.String()
+			}
+		}
+	}
+
+	return batch, nil
+}
+
+func GeneratePrompt(session *Session, file *fileinfo.FileInfo) ([]genai.Part, error) {
 
 	filePath := filepath.Join(file.Directory, file.Name)
 
@@ -104,179 +191,127 @@ func GenerateDescription(session *Session, file *fileinfo.FileInfo) (string, err
 
 	// fmt.Printf("\nmimeType : %s \n", mimeType)
 
-	var descriptionFunc func() (string, error)
+	var descriptionFunc func() ([]genai.Part, error)
 
 	switch {
 	case strings.HasPrefix(mimeType, "text/"):
-		descriptionFunc = func() (string, error) {
-			return handleTextFile(session, *file)
+		descriptionFunc = func() ([]genai.Part, error) {
+			return handleTextFile(*file)
 		}
 	case strings.HasSuffix(mimeType, "/pdf"):
-		descriptionFunc = func() (string, error) {
-			return handlePdfFile(session, *file)
+		descriptionFunc = func() ([]genai.Part, error) {
+			return handlePdfFile(*file)
 		}
 	case strings.HasPrefix(mimeType, "image/"):
-		descriptionFunc = func() (string, error) {
+		descriptionFunc = func() ([]genai.Part, error) {
 			return handleImageFile(session, file)
 		}
 	case strings.HasPrefix(mimeType, "video/"):
-		descriptionFunc = func() (string, error) {
+		descriptionFunc = func() ([]genai.Part, error) {
 			return handleVideoFile(session, file)
 		}
 	default:
-		return getDefaultDesc(session, *file)
+		return getDefaultPrompt(*file)
 	}
 
-	description, err := timeOut(30*time.Second, descriptionFunc)
+	prompt, err := timeOut(3*time.Minute, descriptionFunc)
 	if err != nil {
-		return getDefaultDesc(session, *file)
+		return getDefaultPrompt(*file)
 	}
 
-	return description, nil
+	return prompt, nil
 }
 
-func timeOut(duration time.Duration, fn func() (string, error)) (string, error) {
+func timeOut(duration time.Duration, fn func() ([]genai.Part, error)) ([]genai.Part, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), duration)
 	defer cancel()
 
 	ch := make(chan struct {
-		desc string
-		err  error
+		prompt []genai.Part
+		err    error
 	}, 1)
 
 	go func() {
-		desc, err := fn()
+		prompt, err := fn()
 		ch <- struct {
-			desc string
-			err  error
-		}{desc, err}
+			prompt []genai.Part
+			err    error
+		}{prompt, err}
 	}()
 
 	select {
 	case result := <-ch:
-		return result.desc, result.err
+		return result.prompt, result.err
 	case <-ctx.Done():
-		return "No description", ctx.Err()
+		return nil, ctx.Err()
 	}
 }
 
-func getDefaultDesc(session *Session, file fileinfo.FileInfo) (string, error) {
+func getDefaultPrompt(file fileinfo.FileInfo) ([]genai.Part, error) {
 
-	model := session.client.GenerativeModel("gemini-1.5-flash")
+	// model := session.client.GenerativeModel("gemini-1.5-flash")
 	prompt := []genai.Part{
 		genai.Text(fmt.Sprintf("Generate a description in less than 100 words about what this file is and what is it about, based on the meta data given : \n\nFile Name : %s\nFile Directory : %s\nFile Size : %d\nFile Modified Time : %v", file.Name, file.Directory, file.Size, file.ModifiedTime)),
 	}
 
-	resp, err := model.GenerateContent(session.ctx, prompt...)
-	if err != nil {
-		return "No description", err
-	}
-
-	if len(resp.Candidates) > 0 && resp.Candidates[0].Content != nil {
-		var builder strings.Builder
-
-		for _, candidate := range resp.Candidates {
-			for _, part := range candidate.Content.Parts {
-				builder.WriteString(fmt.Sprintf("%s", part))
-			}
-		}
-		return builder.String(), nil
-	}
-
-	return "No description", fmt.Errorf("no description generated")
+	return prompt, nil
 
 }
 
-func handleTextFile(session *Session, file fileinfo.FileInfo) (string, error) {
+func handleTextFile(file fileinfo.FileInfo) ([]genai.Part, error) {
 
 	filePath := filepath.Join(file.Directory, file.Name)
 
 	content, err := os.ReadFile(filePath)
 	if err != nil {
-		return getDefaultDesc(session, file)
+		return nil, err
 	}
 
-	model := session.client.GenerativeModel("gemini-1.5-flash")
+	// model := session.client.GenerativeModel("gemini-1.5-flash")
 	prompt := []genai.Part{
 		genai.Text(fmt.Sprintf("Generate a description in less than 100 words about what this file is and what is it about, based on the given content : \n\n%s", string(content))),
 	}
 
-	resp, err := model.GenerateContent(session.ctx, prompt...)
-	if err != nil {
-		return getDefaultDesc(session, file)
-	}
-
-	if len(resp.Candidates) > 0 && resp.Candidates[0].Content != nil {
-		var builder strings.Builder
-
-		for _, candidate := range resp.Candidates {
-			for _, part := range candidate.Content.Parts {
-				builder.WriteString(fmt.Sprintf("%s", part))
-			}
-		}
-		return builder.String(), nil
-	}
-
-	return getDefaultDesc(session, file)
+	return prompt, err
 }
 
-func handlePdfFile(session *Session, file fileinfo.FileInfo) (string, error) {
+func handlePdfFile(file fileinfo.FileInfo) ([]genai.Part, error) {
 	filePath := filepath.Join(file.Directory, file.Name)
 
 	r, err := pdf.Open(filePath)
 	if err != nil {
-		return getDefaultDesc(session, file)
+		return nil, err
 	}
 	var buf bytes.Buffer
 	b, err := r.GetPlainText()
 	if err != nil {
-		return getDefaultDesc(session, file)
+		return nil, err
 	}
 	buf.ReadFrom(b)
 	content := buf.String()
 
-	model := session.client.GenerativeModel("gemini-1.5-flash")
 	prompt := []genai.Part{
 		genai.Text(fmt.Sprintf("Generate a description in less than 100 words about what this file is and what is it about, based on the given content : \n\n%s", content)),
 	}
 
-	resp, err := model.GenerateContent(session.ctx, prompt...)
-	if err != nil {
-		return getDefaultDesc(session, file)
-	}
-
-	if len(resp.Candidates) > 0 && resp.Candidates[0].Content != nil {
-		var builder strings.Builder
-
-		for _, candidate := range resp.Candidates {
-			for _, part := range candidate.Content.Parts {
-				builder.WriteString(fmt.Sprintf("%s", part))
-			}
-		}
-		return builder.String(), nil
-	}
-
-	return getDefaultDesc(session, file)
+	return prompt, err
 
 }
 
-func handleImageFile(session *Session, file *fileinfo.FileInfo) (string, error) {
+func handleImageFile(session *Session, file *fileinfo.FileInfo) ([]genai.Part, error) {
 	if file.FileUploaded {
-		desc, err := processUploadedImage(session, *file, file.UploadedFileUrl)
-		return desc, err
+		return processUploadedImage(*file, file.UploadedFileUrl)
 	}
 
 	uploadedFile, err := uploadImage(session, *file)
 	if err != nil {
-		return getDefaultDesc(session, *file)
+		return nil, err
 	}
 
 	file.FileUploaded = true
 	file.UploadedFileUrl = uploadedFile
 
-	desc, err := processUploadedVideo(session, *file, uploadedFile)
-
-	return desc, err
+	return processUploadedImage(*file, uploadedFile)
 
 }
 
@@ -309,50 +344,31 @@ func uploadImage(session *Session, file fileinfo.FileInfo) (*genai.File, error) 
 	return uploadedFile, nil
 }
 
-func processUploadedImage(session *Session, file fileinfo.FileInfo, uploadedFile *genai.File) (string, error) {
+func processUploadedImage(file fileinfo.FileInfo, uploadedFile *genai.File) ([]genai.Part, error) {
 
-	model := session.client.GenerativeModel("gemini-1.5-flash")
 	prompt := []genai.Part{
 		genai.FileData{URI: uploadedFile.URI},
 		genai.Text(fmt.Sprintf("Generate a description in less than 100 words about what this file %s is and what is it about ", file.Name)),
 	}
 
-	resp, err := model.GenerateContent(session.ctx, prompt...)
-	if err != nil {
-		return getDefaultDesc(session, file)
-	}
-
-	if len(resp.Candidates) > 0 && resp.Candidates[0].Content != nil {
-		var builder strings.Builder
-
-		for _, candidate := range resp.Candidates {
-			for _, part := range candidate.Content.Parts {
-				builder.WriteString(fmt.Sprintf("%s", part))
-			}
-		}
-		return builder.String(), nil
-	}
-
-	return getDefaultDesc(session, file)
+	return prompt, nil
 }
 
-func handleVideoFile(session *Session, file *fileinfo.FileInfo) (string, error) {
+func handleVideoFile(session *Session, file *fileinfo.FileInfo) ([]genai.Part, error) {
 	if file.FileUploaded {
-		desc, err := processUploadedVideo(session, *file, file.UploadedFileUrl)
-		return desc, err
+		return processUploadedVideo(*file, file.UploadedFileUrl)
 	}
 
 	uploadedFile, err := uploadVideo(session, *file)
 	if err != nil {
-		return getDefaultDesc(session, *file)
+		return nil, err
 	}
 
 	file.FileUploaded = true
 	file.UploadedFileUrl = uploadedFile
 
-	desc, err := processUploadedVideo(session, *file, uploadedFile)
+	return processUploadedVideo(*file, uploadedFile)
 
-	return desc, err
 }
 
 func uploadVideo(session *Session, file fileinfo.FileInfo) (*genai.File, error) {
@@ -383,10 +399,6 @@ func uploadVideo(session *Session, file fileinfo.FileInfo) (*genai.File, error) 
 		return nil, err
 	}
 
-	return uploadedFile, nil
-}
-
-func processUploadedVideo(session *Session, file fileinfo.FileInfo, uploadedFile *genai.File) (string, error) {
 	for uploadedFile.State == genai.FileStateProcessing {
 		fmt.Print(".")
 		// Sleep for 10 seconds
@@ -397,39 +409,22 @@ func processUploadedVideo(session *Session, file fileinfo.FileInfo, uploadedFile
 		// Fetch the file from the API again.
 		uploadedFile, err = session.client.GetFile(session.ctx, file.Name)
 		if err != nil {
-			return getDefaultDesc(session, file)
+			return nil, err
 		}
 	}
 
-	// fmt.Printf("state : %v", uploadedFile.State)
-	if uploadedFile.State == 2 {
+	return uploadedFile, nil
+}
 
-		model := session.client.GenerativeModel("gemini-1.5-flash")
-		prompt := []genai.Part{
-			genai.FileData{URI: uploadedFile.URI},
-			genai.Text(fmt.Sprintf("Generate a description in less than 100 words about what this file is and what is it about, based on the first 7 seconds of the video file %s ", file.Name)),
-		}
+func processUploadedVideo(file fileinfo.FileInfo, uploadedFile *genai.File) ([]genai.Part, error) {
 
-		resp, err := model.GenerateContent(session.ctx, prompt...)
-		if err != nil {
-			return getDefaultDesc(session, file)
-		}
-
-		if len(resp.Candidates) > 0 && resp.Candidates[0].Content != nil {
-			var builder strings.Builder
-
-			for _, candidate := range resp.Candidates {
-				for _, part := range candidate.Content.Parts {
-					builder.WriteString(fmt.Sprintf("%s", part))
-				}
-			}
-			return builder.String(), nil
-		}
-
-		return getDefaultDesc(session, file)
+	// model := session.client.GenerativeModel("gemini-1.5-flash")
+	prompt := []genai.Part{
+		genai.FileData{URI: uploadedFile.URI},
+		genai.Text(fmt.Sprintf("Generate a description in less than 100 words about what this file is and what is it about, based on the first 7 seconds of the video file %s ", file.Name)),
 	}
 
-	return getDefaultDesc(session, file)
+	return prompt, nil
 
 }
 
