@@ -2,6 +2,7 @@ package gemini
 
 import (
 	"context"
+	"fmt"
 	"gemini_cli_tool/fileinfo"
 	"math"
 
@@ -31,7 +32,7 @@ func SearchRelevantFiles(files []fileinfo.FileInfo, query string, relevanceIndex
 	for i, file := range files {
 		similarity := cosineSimilarity(file.Embedding, queryEmbedding)
 
-		// fmt.Printf("\n||Similarity With %s : %f||\n", file.Name, similarity)
+		fmt.Printf("\n||Similarity With %s : %f||\n", file.Name, similarity)
 
 		if similarity > maxSimilarity && file.Description != "" {
 			maxSimilarity = similarity
@@ -43,7 +44,7 @@ func SearchRelevantFiles(files []fileinfo.FileInfo, query string, relevanceIndex
 	}
 
 	// return results, nil
-	if maxSimilarity > 0.4 {
+	if maxSimilarity > 0.35 {
 		return result, nil
 	}
 
