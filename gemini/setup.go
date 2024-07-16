@@ -24,7 +24,7 @@ func NewsetupSession(ctx context.Context) (*Session, error) {
 	return &Session{
 		ctx:     ctx,
 		client:  client,
-		session: client.GenerativeModel("gemini-pro").StartChat(),
+		session: client.GenerativeModel("gemini-flash").StartChat(),
 	}, nil
 }
 
