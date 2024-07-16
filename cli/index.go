@@ -64,11 +64,13 @@ func indexFiles() error {
 
 			if !info.IsDir() && !shouldSkip(info.Name(), config.SkipType, config.SkipFile) {
 				files = append(files, fileinfo.FileInfo{
-					Id:           i,
-					Name:         info.Name(),
-					Directory:    filepath.Dir(path),
-					Size:         info.Size(),
-					ModifiedTime: info.ModTime(),
+					Id:              i,
+					Name:            info.Name(),
+					Directory:       filepath.Dir(path),
+					Size:            info.Size(),
+					ModifiedTime:    info.ModTime(),
+					FileUploaded:    false,
+					UploadedFileUrl: nil,
 				})
 
 				i = i + 1
