@@ -8,6 +8,7 @@ import (
 	"mime"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -24,9 +25,10 @@ import (
 const (
 	maxRetries            = 10
 	baseDelay             = 100 * time.Millisecond
-	maxConcurrentRequests = 15
+	maxConcurrentRequests = 10
 	maxTokensPerRequest   = 900000
-	maxFilesPerBatch      = 3
+	maxFilesPerBatch      = 4
+	timeOutDuration       = 20 * time.Second
 )
 
 func GenerateDescriptions(files []fileinfo.FileInfo) []fileinfo.FileInfo {
@@ -113,7 +115,7 @@ func GenerateDescriptions(files []fileinfo.FileInfo) []fileinfo.FileInfo {
 func GenerateBatchDescription(session *Session, batch []fileinfo.FileInfo) ([]fileinfo.FileInfo, error) {
 	model := session.client.GenerativeModel("gemini-1.5-flash")
 	var prompts []genai.Part = []genai.Part{
-		genai.Text(fmt.Sprintf("Generate descriptions for %d contents given below ,in the sequence of input .Enclose each Description in $ signs on both sides and start each with its filePath.\n\n", len(batch))),
+		genai.Text(fmt.Sprintf("Generate exactly %d descriptions for %d contents given below ,in the exact sequence of input .Enclose each Description in $ signs on both sides .\n\n", len(batch), len(batch))),
 	}
 
 	for _, file := range batch {
@@ -158,7 +160,7 @@ func GenerateBatchDescription(session *Session, batch []fileinfo.FileInfo) ([]fi
 		// Ensure there are exactly as many descriptions as files
 		if len(filteredDescriptions) != len(batch) {
 			fmt.Printf("mismatch between descriptions %d and files count %d\n", len(filteredDescriptions), len(batch))
-			fmt.Println(resp.Candidates[0].Content.Parts[0])
+			// fmt.Println(resp.Candidates[0].Content.Parts[0])
 			fmt.Println(prompts)
 			return nil, fmt.Errorf("mismatch between descriptions and files count")
 		}
@@ -203,7 +205,7 @@ func GeneratePrompt(session *Session, file *fileinfo.FileInfo) ([]genai.Part, er
 		return getDefaultPrompt(*file)
 	}
 
-	prompt, err := timeOut(30*time.Second, descriptionFunc)
+	prompt, err := timeOut(timeOutDuration, descriptionFunc)
 	if err != nil {
 		return getDefaultPrompt(*file)
 	}
@@ -346,11 +348,25 @@ func processUploadedImage(file fileinfo.FileInfo, uploadedFile *genai.File) ([]g
 }
 
 func handleVideoFile(session *Session, file *fileinfo.FileInfo) ([]genai.Part, error) {
+	if file.Size > 50*1024*1024 {
+		fmt.Println("File too big .. calling default func")
+		return getDefaultPrompt(*file)
+	}
+
 	if file.FileUploaded {
+		fmt.Println("Already uploaded .. moving to processing..")
 		return processUploadedVideo(*file, file.UploadedFileUrl)
 	}
 
-	uploadedFile, err := uploadVideo(session, *file)
+	filePath := filepath.Join(file.Directory, file.Name)
+	trimmedFilePath, err := trimVideo(filePath, 10)
+	if err != nil {
+		fmt.Println(err)
+		return nil, err
+	}
+	defer os.Remove(trimmedFilePath)
+
+	uploadedFile, err := uploadVideo(session, trimmedFilePath, *file)
 	if err != nil {
 		return nil, err
 	}
@@ -362,16 +378,32 @@ func handleVideoFile(session *Session, file *fileinfo.FileInfo) ([]genai.Part, e
 
 }
 
-func uploadVideo(session *Session, file fileinfo.FileInfo) (*genai.File, error) {
-	filePath := filepath.Join(file.Directory, file.Name)
+func trimVideo(filePath string, duration int) (string, error) {
+	ext := filepath.Ext(filePath)
+	base := filePath[:len(filePath)-len(ext)]
 
-	f, err := os.Open(filePath)
+	// Create the trimmed file path by appending "_trimmed" before the file extension
+	trimmedFilePath := base + "_trimmed" + ext
+	fmt.Printf("\nInside trimmed video func from %s : %s\n", filePath, trimmedFilePath)
+
+	cmd := exec.Command("ffmpeg", "-i", filePath, "-t", fmt.Sprintf("%d", duration), "-c", "copy", trimmedFilePath)
+	err := cmd.Run()
+	if err != nil {
+		return "", err
+	}
+
+	return trimmedFilePath, nil
+}
+
+func uploadVideo(session *Session, trimmedFilePath string, file fileinfo.FileInfo) (*genai.File, error) {
+
+	f, err := os.Open(trimmedFilePath)
 	if err != nil {
 		return nil, err
 	}
 
 	//setting a display name
-	opts := genai.UploadFileOptions{DisplayName: filepath.Base(filePath)}
+	opts := genai.UploadFileOptions{DisplayName: filepath.Base(trimmedFilePath)}
 
 	fmt.Print("uplaoding file..", file.Name, "\n")
 	//Uploaded file to gemini
@@ -413,7 +445,7 @@ func processUploadedVideo(file fileinfo.FileInfo, uploadedFile *genai.File) ([]g
 	// model := session.client.GenerativeModel("gemini-1.5-flash")
 	prompt := []genai.Part{
 		genai.FileData{URI: uploadedFile.URI},
-		genai.Text(fmt.Sprintf("Generate a description in less than 100 words about what this file is and what is it about, based on the first 7 seconds of the video file %s ", filePath)),
+		genai.Text(fmt.Sprintf("Generate a description in less than 100 words about what this file is and what is it about, based on the video file %s ", filePath)),
 	}
 
 	return prompt, nil
