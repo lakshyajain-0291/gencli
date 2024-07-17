@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"gemini_cli_tool/fileinfo"
 	"os"
 	"strings"
 	"time"
@@ -78,7 +79,7 @@ func (c *systemCommand) run(message string) bool {
 			if err != nil {
 				c.print(err.Error())
 			} else {
-				c.print(fmt.Sprintf("Indexing completed successfully."))
+				c.print("Indexing completed successfully.")
 			}
 
 		} else if strings.HasPrefix(message, systemCmdSearch) {
@@ -89,7 +90,7 @@ func (c *systemCommand) run(message string) bool {
 			if err != nil {
 				c.print(err.Error())
 			} else {
-				c.print(fmt.Sprint("Most relevelent file is : "))
+				c.print("Most relevelent file is : ")
 				c.print(fmt.Sprintf("\nFile : %s\nDirectory : %s\nDescription : %s\n", file.Name, file.Directory, file.Description))
 			}
 
@@ -107,7 +108,7 @@ func (c *systemCommand) print(message string) {
 
 type geminiCommand struct {
 	setup   *setup
-	spinner *spinner
+	spinner *fileinfo.Spinner
 	writer  *bufio.Writer
 }
 
@@ -117,7 +118,7 @@ func newGeminiCommand(setup *setup) command {
 	writer := bufio.NewWriter(os.Stdout)
 	return &geminiCommand{
 		setup:   setup,
-		spinner: newSpinner(5, time.Second, writer),
+		spinner: fileinfo.NewSpinner(5, time.Second, writer),
 		writer:  writer,
 	}
 }
@@ -125,7 +126,7 @@ func newGeminiCommand(setup *setup) command {
 // run implements command.
 func (g *geminiCommand) run(message string) bool {
 	g.printFlush(g.setup.prompt.gemini)
-	g.spinner.start()
+	g.spinner.Start()
 
 	if g.setup.opts.Format {
 		g.runBlocking(message)
@@ -140,7 +141,7 @@ func (g *geminiCommand) runBlocking(message string) {
 	// fmt.Println("Giving formatted output")
 
 	response, err := g.setup.session.SendMessage(message)
-	g.spinner.stop()
+	g.spinner.Stop()
 
 	if err != nil {
 		fmt.Print(Red(err.Error()))
@@ -169,7 +170,7 @@ func (g *geminiCommand) runStreaming(message string) {
 	// fmt.Println("Giving streaming output")
 
 	responseIterator := g.setup.session.SendMessageStream(message)
-	g.spinner.stop()
+	g.spinner.Stop()
 	for {
 		response, err := responseIterator.Next()
 		if err != nil {

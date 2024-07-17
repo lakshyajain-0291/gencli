@@ -9,10 +9,10 @@ import (
 	"github.com/google/generative-ai-go/genai"
 )
 
-func SearchRelevantFiles(files []fileinfo.FileInfo, query string, relevanceIndex float32) (int, error) {
+func SearchRelevantFiles(files []fileinfo.FileInfo, query string, relevanceIndex float32, defaultApiKey string) (int, error) {
 	ctx := context.Background()
 
-	setupSession, err := NewsetupSession(ctx)
+	setupSession, err := NewsetupSession(ctx, defaultApiKey)
 	if err != nil {
 		return -1, err
 	}

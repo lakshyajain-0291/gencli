@@ -41,7 +41,13 @@ func searchFiles(query string) (*fileinfo.FileInfo, error) {
 		return nil, err
 	}
 
-	result, err := gemini.SearchRelevantFiles(files, query, config.RelevanceIndex)
+	apiKeys := config.APIKeys
+	if apiKeys == nil {
+		return nil, fmt.Errorf("no apikeys provided")
+	}
+	defaultApiKey := apiKeys[0]
+
+	result, err := gemini.SearchRelevantFiles(files, query, config.RelevanceIndex, defaultApiKey)
 	if err != nil {
 		return nil, fmt.Errorf("search failed : %w", err)
 	}
@@ -56,7 +62,7 @@ func searchFiles(query string) (*fileinfo.FileInfo, error) {
 	// }
 
 	if result < 0 {
-		return nil, fmt.Errorf("no matches found.")
+		return nil, fmt.Errorf("no matches found")
 	} else {
 		return &files[result], nil
 	}
@@ -70,7 +76,7 @@ func displayAllFiles() error {
 	}
 
 	if files == nil {
-		return fmt.Errorf("failed to find any files in index..index the files..")
+		return fmt.Errorf("failed to find any files in index..index the files")
 	}
 
 	for _, file := range files {

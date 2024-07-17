@@ -2,7 +2,6 @@ package gemini
 
 import (
 	"context"
-	"os"
 
 	"github.com/google/generative-ai-go/genai"
 	"google.golang.org/api/option"
@@ -14,8 +13,7 @@ type Session struct {
 	session *genai.ChatSession
 }
 
-func NewsetupSession(ctx context.Context) (*Session, error) {
-	apiKey := os.Getenv("GEMINI_API_KEY")
+func NewsetupSession(ctx context.Context, apiKey string) (*Session, error) {
 
 	client, err := genai.NewClient(ctx, option.WithAPIKey(apiKey))
 	if err != nil {

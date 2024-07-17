@@ -3,7 +3,6 @@ package gemini
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"math"
 	"mime"
@@ -28,20 +27,38 @@ const (
 	baseDelay             = 100 * time.Millisecond
 	maxConcurrentRequests = 10
 	maxTokensPerRequest   = 900000
-	maxFilesPerBatch      = 5
 	timeOutDuration       = 20 * time.Second
 )
 
-func GenerateDescriptions(files []fileinfo.FileInfo) []fileinfo.FileInfo {
+func GenerateDescriptions(files []fileinfo.FileInfo, apiKeys []string) []fileinfo.FileInfo {
+	// Create a buffered writer for the spinner output
+	// writer := bufio.NewWriterSize(os.Stdout, 0)
+	// spinner := fileinfo.NewSpinner(20, 100*time.Millisecond, writer)
+
+	// // Start the spinner in a separate goroutine
+	// spinner.Start()
+
+	// // Channel to signal the progress indicator to stop
+	// done := make(chan struct{})
 
 	ctx := context.Background()
-	session, err := NewsetupSession(ctx)
-	if err != nil {
-		fmt.Println("Failed to start new setup session with Gemini:", err)
-		return files
+	var sessions []*Session
+
+	for _, apikey := range apiKeys {
+		session, err := NewsetupSession(ctx, apikey)
+		if err != nil {
+			fmt.Println("Failed to start new setup session with Gemini:", err)
+			return files
+		}
+
+		sessions = append(sessions, session)
 	}
 
-	// fileCh := make(chan fileinfo.FileInfo, len(files))
+	var processedFiles []fileinfo.FileInfo
+
+	// go func() {
+	maxFilesPerBatch := len(apiKeys)
+
 	fileCh := make(chan []fileinfo.FileInfo, len(files)/maxFilesPerBatch+1)
 	resultCh := make(chan fileinfo.FileInfo, len(files))
 
@@ -49,20 +66,6 @@ func GenerateDescriptions(files []fileinfo.FileInfo) []fileinfo.FileInfo {
 	// var currentTokens int
 
 	for _, file := range files {
-		// prompt, err := GeneratePrompt(session, &file)
-		// if err != nil {
-		// 	continue
-		// }
-
-		// model := session.client.GenerativeModel("gemini-1.5-flash")
-		// respToken, err := model.CountTokens(session.ctx, prompt...)
-		// if err != nil {
-		// 	return nil
-		// }
-
-		// tokens := respToken.TotalTokens
-		// fmt.Printf("Tokens for desc of %s is %d\n", file.Name, respToken.TotalTokens)
-
 		if /*currentTokens+int(tokens) > maxTokensPerRequest ||*/ len(batch) >= maxFilesPerBatch {
 			fileCh <- batch
 			batch = []fileinfo.FileInfo{}
@@ -84,11 +87,11 @@ func GenerateDescriptions(files []fileinfo.FileInfo) []fileinfo.FileInfo {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
-			fmt.Printf("Goroutine %d started\n", id)
+			// fmt.Printf("Goroutine %d started\n", id)
 			for batch := range fileCh {
-				fmt.Printf("Goroutine %d processing batch", id)
+				// fmt.Printf("Goroutine %d processing batch", id)
 				var err error
-				resultBatch, err := GenerateBatchDescription(session, batch)
+				resultBatch, err := GenerateBatchDescription(sessions, batch)
 				if err != nil {
 					return
 				}
@@ -98,113 +101,90 @@ func GenerateDescriptions(files []fileinfo.FileInfo) []fileinfo.FileInfo {
 					resultCh <- file
 				}
 			}
-			fmt.Printf("Goroutine %d finished\n", id)
+			// fmt.Printf("Goroutine %d finished\n", id)
 		}(i)
 	}
 
 	wg.Wait()
 	close(resultCh)
-	fmt.Println("All goroutines have finished processing")
+	// fmt.Println("All goroutines have finished processing")
 
-	var processedFiles []fileinfo.FileInfo
 	for file := range resultCh {
 		processedFiles = append(processedFiles, file)
 	}
+
+	// Signal the spinner to stop
+	// done <- struct{}{}
+	// }()
+
+	// // Wait for the process to complete
+	// <-done
+	// spinner.Stop()
+
 	return processedFiles
 }
 
-func GenerateBatchDescription(session *Session, batch []fileinfo.FileInfo) ([]fileinfo.FileInfo, error) {
-	model := session.client.GenerativeModel("gemini-1.5-flash")
-	var prompts []genai.Part = []genai.Part{
-		genai.Text(fmt.Sprintf("Generate exactly %d descriptions for %d contents given below .Give result in th json format along with their fileId and description in the same sequence as the input-\n\n", len(batch), len(batch))),
-	}
+func GenerateBatchDescription(sessions []*Session, batch []fileinfo.FileInfo) ([]fileinfo.FileInfo, error) {
 
-	for _, file := range batch {
-		prompt, err := GeneratePrompt(session, &file)
-		if err != nil {
-			return nil, err
-		}
-
-		prompts = append(prompts, prompt...)
-		prompts = append(prompts, []genai.Part{genai.Text("\n\n")}...)
-	}
-
-	fmt.Printf("\nSending combined prompts to Gemini for %d files\n\n that is %s", len(batch), fmt.Sprintf("%s", prompts))
-	resp, err := model.GenerateContent(session.ctx, prompts...)
-	if err != nil {
-		// fmt.Printf("%w", err.(*apierror.APIError))
-		fmt.Printf("Error generating content from Gemini: %v\n", err)
-		if apiErr, ok := err.(*apierror.APIError); ok {
-			// fmt.Printf("\n||%d", apiErr.HTTPCode())
-			if apiErr.HTTPCode() == http.StatusTooManyRequests {
-				err = retryWithBackoff(func() error {
-					var retryErr error
-					resp, err = model.GenerateContent(session.ctx, prompts...)
-					return retryErr
-				})
-				if err != nil {
-					fmt.Printf("Error after retry: %v\n", err)
-					return nil, err
-				}
-			}
-		} else {
-			return nil, err
-		}
-	}
-
-	if len(resp.Candidates) == 0 || len(resp.Candidates[0].Content.Parts) == 0 {
-		return nil, fmt.Errorf("no content returned from Gemini")
-	}
-
-	rawContent := fmt.Sprintf("%s", resp.Candidates[0].Content.Parts[0])
-	fmt.Println("Raw response content : ", rawContent)
-
-	//Use regex tp extract JSON content
-	// re := regexp.MustCompile(`\[{.*}\]`)
-	// jsonStr := re.FindString(rawResp)
-	// if jsonStr == "" {
-	// 	fmt.Printf("no valid JSON found in the response")
-	// 	return nil, fmt.Errorf("no valid JSON found in the response")
-	// }
-
-	startIndex := strings.Index(rawContent, "[")
-	endIndex := strings.LastIndex(rawContent, "]") + 1
-	if startIndex == -1 || endIndex == -1 {
-		return nil, fmt.Errorf("no valid JSON found in the response")
-	}
-
-	jsonContent := rawContent[startIndex:endIndex]
-	fmt.Println("Extracted JSON content:", jsonContent)
-
-	// Parse the JSON response to extract descriptions
-	var descriptions []struct {
-		FileId      int    `json:"fileId"`
-		Description string `json:"description"`
-	}
-
-	err = json.Unmarshal([]byte(jsonContent), &descriptions)
-	if err != nil {
-		fmt.Printf("Error unmarshalling response: %v\n", err)
-		return nil, err
-	}
-
-	descriptionsMap := make(map[int]string)
-	for _, desc := range descriptions {
-		descriptionsMap[desc.FileId] = desc.Description
-	}
+	// fmt.Print("length of each batch :", len(batch))
+	var resultBatch []fileinfo.FileInfo
 
 	for i, file := range batch {
-		fileId := file.Id
-		if desc, exists := descriptionsMap[fileId]; exists {
-			batch[i].Description = desc
-			fmt.Printf("Description for file %s: %s\n", file.Name, desc)
-		} else {
-			fmt.Printf("No description found for file %s\n", file.Name)
+		session := sessions[i]
+		model := session.client.GenerativeModel("gemini-1.5-flash")
 
+		prompt, err := GeneratePrompt(session, &file)
+		if err != nil {
+			fmt.Printf("Error generating prompt for file %s: %v\n", file.Name, err)
+			file.Description = "nil"
+			continue
 		}
+
+		resp, err := model.GenerateContent(session.ctx, prompt...)
+		if err != nil {
+			// fmt.Printf("%w", err.(*apierror.APIError))
+			// fmt.Printf("Error generating content from Gemini: %v\n", err)
+			if apiErr, ok := err.(*apierror.APIError); ok {
+				// fmt.Printf("\n||%d", apiErr.HTTPCode())
+				if apiErr.HTTPCode() == http.StatusTooManyRequests {
+					err = retryWithBackoff(func() error {
+						var retryErr error
+						resp, retryErr = model.GenerateContent(session.ctx, prompt...)
+						return retryErr
+					})
+					if err != nil {
+						fmt.Printf("Error after retry: %v\n", err)
+						file.Description = "nil"
+						continue
+					}
+				} else {
+					file.Description = "nil"
+					continue
+				}
+			} else {
+				file.Description = "nil"
+				continue
+			}
+		}
+
+		// fmt.Print("respose of file ", file.Name, " is ", resp.Candidates[0].Content.Parts[0])
+		if len(resp.Candidates) > 0 && resp.Candidates[0].Content != nil {
+			var builder strings.Builder
+
+			for _, candidate := range resp.Candidates {
+				for _, part := range candidate.Content.Parts {
+					builder.WriteString(fmt.Sprintf("%s", part))
+				}
+			}
+			file.Description = builder.String()
+		} else {
+			file.Description = "nil"
+		}
+
+		resultBatch = append(resultBatch, file)
 	}
 
-	return batch, nil
+	return resultBatch, nil
 }
 
 func GeneratePrompt(session *Session, file *fileinfo.FileInfo) ([]genai.Part, error) {
@@ -351,14 +331,14 @@ func uploadImage(session *Session, file fileinfo.FileInfo) (*genai.File, error) 
 	//setting a display name
 	opts := genai.UploadFileOptions{DisplayName: filepath.Base(filePath)}
 
-	fmt.Print("uploading file..", file.Name, "\n")
+	// fmt.Print("uploading file..", file.Name, "\n")
 
 	//Uploaded file to gemini
 	img, err := session.client.UploadFile(session.ctx, "", f, &opts)
 	if err != nil {
 		return nil, err
 	}
-	fmt.Print("uploaded file..", file.Name, "\n")
+	// fmt.Print("uploaded file..", file.Name, "\n")
 
 	//Got metadata of the uploaded file
 	uploadedFile, err := session.client.GetFile(session.ctx, img.Name)
@@ -438,13 +418,13 @@ func uploadVideo(session *Session, trimmedFilePath string, file fileinfo.FileInf
 	//setting a display name
 	opts := genai.UploadFileOptions{DisplayName: filepath.Base(trimmedFilePath)}
 
-	fmt.Print("uplaoding file..", file.Name, "\n")
+	// fmt.Print("uplaoding file..", file.Name, "\n")
 	//Uploaded file to gemini
 	vid, err := session.client.UploadFile(session.ctx, "", f, &opts)
 	if err != nil {
 		return nil, err
 	}
-	fmt.Print("uplaoded file..", file.Name, "\n")
+	// fmt.Print("uplaoded file..", file.Name, "\n")
 
 	// const baseDelay = 10 * time.Millisecond
 
@@ -485,11 +465,11 @@ func processUploadedVideo(file fileinfo.FileInfo, uploadedFile *genai.File) ([]g
 
 }
 
-func GenerateEmbeddings(files []fileinfo.FileInfo) []fileinfo.FileInfo {
+func GenerateEmbeddings(files []fileinfo.FileInfo, defaultApiKey string) []fileinfo.FileInfo {
 
 	ctx := context.Background()
 
-	session, err := NewsetupSession(ctx)
+	session, err := NewsetupSession(ctx, defaultApiKey)
 	if err != nil {
 		fmt.Println("Failed to start new setup session with Gemini:", err)
 		return files
@@ -579,7 +559,7 @@ func retryWithBackoff(operation func() error) error {
 		}
 		// fmt.Printf("\n%d\n", err.(*apierror.APIError).HTTPCode())
 		if apiErr, ok := err.(*apierror.APIError); ok {
-			fmt.Printf("\n||Attempt no : %d||\n", attempt)
+			// fmt.Printf("\n||Attempt no : %d||\n", attempt)
 			if apiErr.HTTPCode() == http.StatusTooManyRequests {
 				delay := time.Duration(math.Pow(2, float64(attempt))) * baseDelay
 				time.Sleep(delay)

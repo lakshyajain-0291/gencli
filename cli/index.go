@@ -6,7 +6,6 @@ import (
 	"gemini_cli_tool/gemini"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -35,6 +34,12 @@ func indexFiles() error {
 	if err != nil {
 		return fmt.Errorf("failed to load config : %w", err)
 	}
+
+	apiKeys := config.APIKeys
+	if apiKeys == nil {
+		return fmt.Errorf("no apikeys provided")
+	}
+	defaultApiKey := apiKeys[0]
 
 	// files, err := LoadIndex()
 
@@ -85,17 +90,17 @@ func indexFiles() error {
 	}
 
 	//implemented sorting for better management of resorces during threading
-	sort.Slice(files, func(i, j int) bool {
-		return files[i].Size < files[j].Size
-	})
+	// sort.Slice(files, func(i, j int) bool {
+	// 	return files[i].Size < files[j].Size
+	// })
 
-	for _, file := range files {
-		fmt.Printf("\nFile Size : %d \n", file.Size)
-		fmt.Printf("\nFile Name : %s \n", file.Name)
-	}
+	// for _, file := range files {
+	// 	fmt.Printf("\nFile Size : %d \n", file.Size)
+	// 	fmt.Printf("\nFile Name : %s \n", file.Name)
+	// }
 
 	//Generate descriptions using Gemini
-	files = gemini.GenerateDescriptions(files)
+	files = gemini.GenerateDescriptions(files, apiKeys)
 
 	for _, file := range files {
 		fmt.Printf("\nFile Size : %d \n", file.Size)
@@ -103,7 +108,7 @@ func indexFiles() error {
 		fmt.Printf("\nDescription : %s \n", file.Description)
 	}
 
-	files = gemini.GenerateEmbeddings(files)
+	files = gemini.GenerateEmbeddings(files, defaultApiKey)
 
 	if err := StoreIndex(files); err != nil {
 		return fmt.Errorf("failed to store index : %w", err)

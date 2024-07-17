@@ -28,7 +28,20 @@ type setup struct {
 }
 
 func startsetup(cmd *cobra.Command, arg []string) error {
-	setupSession, err := gemini.NewsetupSession(context.Background())
+
+	// Set the default API key
+	config, err := LoadConfig()
+	if err != nil {
+		return err
+	}
+
+	apiKeys := config.APIKeys
+	if apiKeys == nil {
+		return fmt.Errorf("no apikeys provided")
+	}
+	defaultApiKey := apiKeys[0]
+
+	setupSession, err := gemini.NewsetupSession(context.Background(), defaultApiKey)
 	if err != nil {
 		// return err
 		return fmt.Errorf("failed to initialize setup session: %w", err)
