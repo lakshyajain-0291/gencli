@@ -13,9 +13,10 @@ type ConfigData struct {
 	SkipType       []string `json:"skip_types"`
 	SkipFile       []string `json:"skip_files"`
 	RelevanceIndex float32  `json:"relevance_index"`
+	APIKeys        []string `json:"api_keys"`
 }
 
-func setConfig(addDirectories []string, deleteDirectories []string, addSkipTypes []string, deleteSkipTypes []string, addSkipFiles []string, deleteSkipFiles []string, relevanceIndex float32) error {
+func setConfig(addDirectories, deleteDirectories, addSkipTypes, deleteSkipTypes, addSkipFiles, deleteSkipFiles, addAPIKeys, deleteAPIKeys []string, relevanceIndex float32) error {
 
 	config, err := LoadConfig()
 	if err != nil {
@@ -58,6 +59,14 @@ func setConfig(addDirectories []string, deleteDirectories []string, addSkipTypes
 
 	for _, fileName := range deleteSkipFiles {
 		config.SkipFile = removeElements(config.SkipFile, fileName)
+	}
+
+	if len(addAPIKeys) > 0 {
+		config.APIKeys = append(config.APIKeys, addAPIKeys...)
+	}
+
+	for _, api := range deleteAPIKeys {
+		config.APIKeys = removeElements(config.APIKeys, api)
 	}
 
 	if relevanceIndex > 0 {

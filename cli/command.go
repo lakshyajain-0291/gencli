@@ -17,6 +17,8 @@ func NewConfigCommand() *cobra.Command {
 	var deleteSkipFiles []string
 	var relevanceIndex float32
 	var showConfig bool
+	var addAPIKeys []string
+	var deleteAPIKeys []string
 
 	cmd := &cobra.Command{
 		Use:   "config",
@@ -31,7 +33,7 @@ func NewConfigCommand() *cobra.Command {
 				showConfigFormatted(config)
 				return nil
 			}
-			return setConfig(addDirectories, deleteDirectories, addSkipTypes, deleteSkipTypes, addSkipFiles, deleteSkipFiles, relevanceIndex)
+			return setConfig(addDirectories, deleteDirectories, addSkipTypes, deleteSkipTypes, addSkipFiles, deleteSkipFiles, addAPIKeys, deleteAPIKeys, relevanceIndex)
 		},
 	}
 
@@ -43,6 +45,8 @@ func NewConfigCommand() *cobra.Command {
 	cmd.Flags().StringSliceVar(&deleteSkipFiles, "del-skipfiles", []string{}, "List of files to stop skipping during indexing")
 	cmd.Flags().Float32VarP(&relevanceIndex, "relindex", "r", 0.8, "Relevance Value used during Indexing")
 	cmd.Flags().BoolVarP(&showConfig, "show-config", "s", false, "Show the current configuration")
+	cmd.Flags().StringSliceVar(&addAPIKeys, "add-apikeys", []string{}, "List of API keys to add")
+	cmd.Flags().StringSliceVar(&deleteAPIKeys, "del-apikeys", []string{}, "List of API keys to remove")
 
 	return cmd
 }
