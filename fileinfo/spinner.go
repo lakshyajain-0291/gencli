@@ -1,4 +1,4 @@
-package cli
+package fileinfo
 
 import (
 	"bufio"
@@ -12,15 +12,15 @@ const (
 	progressRune        = '.'
 )
 
-type spinner struct {
+type Spinner struct {
 	length   int
 	interval time.Duration
 	writer   *bufio.Writer
 	signal   chan struct{}
 }
 
-func newSpinner(length int, interval time.Duration, writer *bufio.Writer) *spinner {
-	return &spinner{
+func NewSpinner(length int, interval time.Duration, writer *bufio.Writer) *Spinner {
+	return &Spinner{
 		length:   length,
 		interval: interval,
 		writer:   writer,
@@ -29,7 +29,7 @@ func newSpinner(length int, interval time.Duration, writer *bufio.Writer) *spinn
 }
 
 //nolint:errcheck
-func (s *spinner) start() {
+func (s *Spinner) Start() {
 	go func() {
 		ticker := time.NewTicker(s.interval)
 		defer ticker.Stop()
@@ -57,13 +57,13 @@ func (s *spinner) start() {
 }
 
 //nolint:errcheck
-func (s *spinner) clear(n int) {
+func (s *Spinner) clear(n int) {
 	s.writer.WriteString(fmt.Sprintf(moveCursorBackward, n))
 	s.writer.WriteString(clearLineFromCursor)
 	s.writer.Flush()
 }
 
-func (s *spinner) stop() {
+func (s *Spinner) Stop() {
 	s.signal <- struct{}{}
 	<-s.signal
 }
