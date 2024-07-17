@@ -3,6 +3,7 @@ package gemini
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"math"
 	"mime"
@@ -27,7 +28,7 @@ const (
 	baseDelay             = 100 * time.Millisecond
 	maxConcurrentRequests = 10
 	maxTokensPerRequest   = 900000
-	maxFilesPerBatch      = 4
+	maxFilesPerBatch      = 5
 	timeOutDuration       = 20 * time.Second
 )
 
@@ -115,7 +116,7 @@ func GenerateDescriptions(files []fileinfo.FileInfo) []fileinfo.FileInfo {
 func GenerateBatchDescription(session *Session, batch []fileinfo.FileInfo) ([]fileinfo.FileInfo, error) {
 	model := session.client.GenerativeModel("gemini-1.5-flash")
 	var prompts []genai.Part = []genai.Part{
-		genai.Text(fmt.Sprintf("Generate exactly %d descriptions for %d contents given below ,in the exact sequence of input .Enclose each Description in $ signs on both sides .\n\n", len(batch), len(batch))),
+		genai.Text(fmt.Sprintf("Generate exactly %d descriptions for %d contents given below .Give result in th json format along with their fileId and description in the same sequence as the input-\n\n", len(batch), len(batch))),
 	}
 
 	for _, file := range batch {
@@ -128,10 +129,11 @@ func GenerateBatchDescription(session *Session, batch []fileinfo.FileInfo) ([]fi
 		prompts = append(prompts, []genai.Part{genai.Text("\n\n")}...)
 	}
 
-	fmt.Printf("\nSending combined prompts to Gemini for %d files\n\n", len(batch))
+	fmt.Printf("\nSending combined prompts to Gemini for %d files\n\n that is %s", len(batch), fmt.Sprintf("%s", prompts))
 	resp, err := model.GenerateContent(session.ctx, prompts...)
 	if err != nil {
 		// fmt.Printf("%w", err.(*apierror.APIError))
+		fmt.Printf("Error generating content from Gemini: %v\n", err)
 		if apiErr, ok := err.(*apierror.APIError); ok {
 			// fmt.Printf("\n||%d", apiErr.HTTPCode())
 			if apiErr.HTTPCode() == http.StatusTooManyRequests {
@@ -140,34 +142,65 @@ func GenerateBatchDescription(session *Session, batch []fileinfo.FileInfo) ([]fi
 					resp, err = model.GenerateContent(session.ctx, prompts...)
 					return retryErr
 				})
+				if err != nil {
+					fmt.Printf("Error after retry: %v\n", err)
+					return nil, err
+				}
 			}
+		} else {
+			return nil, err
 		}
 	}
 
-	fmt.Println(resp.Candidates[0].Content.Parts[0])
-	if len(resp.Candidates) > 0 && resp.Candidates[0].Content != nil {
-		content := resp.Candidates[0].Content.Parts[0]
-		descriptions := strings.Split(fmt.Sprintf("%s", content), "$")
+	if len(resp.Candidates) == 0 || len(resp.Candidates[0].Content.Parts) == 0 {
+		return nil, fmt.Errorf("no content returned from Gemini")
+	}
 
-		var filteredDescriptions []string
-		for _, desc := range descriptions {
-			desc = strings.TrimSpace(desc)
-			if desc != "" {
-				filteredDescriptions = append(filteredDescriptions, desc)
-			}
-		}
+	rawContent := fmt.Sprintf("%s", resp.Candidates[0].Content.Parts[0])
+	fmt.Println("Raw response content : ", rawContent)
 
-		// Ensure there are exactly as many descriptions as files
-		if len(filteredDescriptions) != len(batch) {
-			fmt.Printf("mismatch between descriptions %d and files count %d\n", len(filteredDescriptions), len(batch))
-			// fmt.Println(resp.Candidates[0].Content.Parts[0])
-			fmt.Println(prompts)
-			return nil, fmt.Errorf("mismatch between descriptions and files count")
-		}
+	//Use regex tp extract JSON content
+	// re := regexp.MustCompile(`\[{.*}\]`)
+	// jsonStr := re.FindString(rawResp)
+	// if jsonStr == "" {
+	// 	fmt.Printf("no valid JSON found in the response")
+	// 	return nil, fmt.Errorf("no valid JSON found in the response")
+	// }
 
-		for i := range batch {
-			batch[i].Description = filteredDescriptions[i]
-			// fmt.Printf("file : %s, desc : %s\n", batch[i].Name, filteredDescriptions[i])
+	startIndex := strings.Index(rawContent, "[")
+	endIndex := strings.LastIndex(rawContent, "]") + 1
+	if startIndex == -1 || endIndex == -1 {
+		return nil, fmt.Errorf("no valid JSON found in the response")
+	}
+
+	jsonContent := rawContent[startIndex:endIndex]
+	fmt.Println("Extracted JSON content:", jsonContent)
+
+	// Parse the JSON response to extract descriptions
+	var descriptions []struct {
+		FileId      int    `json:"fileId"`
+		Description string `json:"description"`
+	}
+
+	err = json.Unmarshal([]byte(jsonContent), &descriptions)
+	if err != nil {
+		fmt.Printf("Error unmarshalling response: %v\n", err)
+		return nil, err
+	}
+
+	descriptionsMap := make(map[int]string)
+	for _, desc := range descriptions {
+		descriptionsMap[desc.FileId] = desc.Description
+	}
+
+	for i, file := range batch {
+		fileId := file.Id
+		if desc, exists := descriptionsMap[fileId]; exists {
+			batch[i].Description = desc
+			fmt.Printf("Description for file %s: %s\n", file.Name, desc)
+		} else {
+			fmt.Printf("No description found for file %s\n", file.Name)
+
 		}
 	}
 
@@ -243,7 +276,7 @@ func getDefaultPrompt(file fileinfo.FileInfo) ([]genai.Part, error) {
 
 	// model := session.client.GenerativeModel("gemini-1.5-flash")
 	prompt := []genai.Part{
-		genai.Text(fmt.Sprintf("Generate a description in less than 100 words about what this file is and what is it about, based on the meta data given : \n\nFile Path : %s\nFile Size : %d\nFile Modified Time : %v", filePath, file.Size, file.ModifiedTime)),
+		genai.Text(fmt.Sprintf("Generate a description in less than 100 words about what this file is and what is it about, based on the meta data given : \n\nFile Id : %d\nFile Path : %s\nFile Size : %d\nFile Modified Time : %v", file.Id, filePath, file.Size, file.ModifiedTime)),
 	}
 
 	return prompt, nil
@@ -261,7 +294,7 @@ func handleTextFile(file fileinfo.FileInfo) ([]genai.Part, error) {
 
 	// model := session.client.GenerativeModel("gemini-1.5-flash")
 	prompt := []genai.Part{
-		genai.Text(fmt.Sprintf("Generate a description in less than 100 words about what this file is and what is it about, based on the given content for filePath , %s: \n\n%s", filePath, string(content))),
+		genai.Text(fmt.Sprintf("Generate a description in less than 100 words about what this file is and what is it about, based on the given content for file Id , %d: \n\n%s", file.Id, string(content))),
 	}
 
 	return prompt, err
@@ -283,7 +316,7 @@ func handlePdfFile(file fileinfo.FileInfo) ([]genai.Part, error) {
 	content := buf.String()
 
 	prompt := []genai.Part{
-		genai.Text(fmt.Sprintf("Generate a description in less than 100 words about what this file is and what is it about, based on the given content for filePath, %s : \n\n%s", filePath, content)),
+		genai.Text(fmt.Sprintf("Generate a description in less than 100 words about what this file is and what is it about, based on the given content for file Id, %d : \n\n%s", file.Id, content)),
 	}
 
 	return prompt, err
@@ -337,11 +370,11 @@ func uploadImage(session *Session, file fileinfo.FileInfo) (*genai.File, error) 
 }
 
 func processUploadedImage(file fileinfo.FileInfo, uploadedFile *genai.File) ([]genai.Part, error) {
-	filePath := filepath.Join(file.Directory, file.Name)
+	// filePath := filepath.Join(file.Directory, file.Name)
 
 	prompt := []genai.Part{
 		genai.FileData{URI: uploadedFile.URI},
-		genai.Text(fmt.Sprintf("Generate a description in less than 100 words about what this filePath %s is and what is it about ", filePath)),
+		genai.Text(fmt.Sprintf("Generate a description in less than 100 words about what this file is and what is it about , file Id is %d", file.Id)),
 	}
 
 	return prompt, nil
@@ -384,7 +417,7 @@ func trimVideo(filePath string, duration int) (string, error) {
 
 	// Create the trimmed file path by appending "_trimmed" before the file extension
 	trimmedFilePath := base + "_trimmed" + ext
-	fmt.Printf("\nInside trimmed video func from %s : %s\n", filePath, trimmedFilePath)
+	// fmt.Printf("\nInside trimmed video func from %s : %s\n", filePath, trimmedFilePath)
 
 	cmd := exec.Command("ffmpeg", "-i", filePath, "-t", fmt.Sprintf("%d", duration), "-c", "copy", trimmedFilePath)
 	err := cmd.Run()
@@ -401,7 +434,7 @@ func uploadVideo(session *Session, trimmedFilePath string, file fileinfo.FileInf
 	if err != nil {
 		return nil, err
 	}
-
+	defer f.Close()
 	//setting a display name
 	opts := genai.UploadFileOptions{DisplayName: filepath.Base(trimmedFilePath)}
 
@@ -440,12 +473,12 @@ func uploadVideo(session *Session, trimmedFilePath string, file fileinfo.FileInf
 }
 
 func processUploadedVideo(file fileinfo.FileInfo, uploadedFile *genai.File) ([]genai.Part, error) {
-	filePath := filepath.Join(file.Directory, file.Name)
+	// filePath := filepath.Join(file.Directory, file.Name)
 
 	// model := session.client.GenerativeModel("gemini-1.5-flash")
 	prompt := []genai.Part{
 		genai.FileData{URI: uploadedFile.URI},
-		genai.Text(fmt.Sprintf("Generate a description in less than 100 words about what this file is and what is it about, based on the video file %s ", filePath)),
+		genai.Text(fmt.Sprintf("Generate a description in less than 100 words about what this file is and what is it about, based on the video file whose Id is %d", file.Id)),
 	}
 
 	return prompt, nil
