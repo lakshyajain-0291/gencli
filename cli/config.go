@@ -97,7 +97,7 @@ func LoadConfig() (*ConfigData, error) {
 		return nil, err
 	}
 
-	configPath := filepath.Join(homeDir, ".gencli-config.json")
+	configPath := filepath.Join(homeDir, "gencli\\.gencli-config.json")
 	file, err := os.Open(configPath)
 	if err != nil {
 		return nil, err
@@ -120,7 +120,12 @@ func SaveConfig(config *ConfigData) error {
 		return err
 	}
 
-	configPath := filepath.Join(homeDir, ".gencli-config.json")
+	gencliDir := filepath.Join(homeDir, "gencli")
+	if err := os.MkdirAll(gencliDir, 0755); err != nil {
+		return err
+	}
+
+	configPath := filepath.Join(homeDir, "gencli\\.gencli-config.json")
 	file, err := os.Create(configPath)
 	if err != nil {
 		return err

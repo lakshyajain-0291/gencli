@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"gemini_cli_tool/fileinfo"
 
 	"github.com/spf13/cobra"
 )
@@ -51,12 +52,14 @@ func NewConfigCommand() *cobra.Command {
 	return cmd
 }
 
-func NewIndexCommand() *cobra.Command {
+func NewIndexCommand(hs *fileinfo.HashSet) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "index",
 		Short: "Index files in the configured directories",
-		RunE:  indexFilesCmd,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return indexFilesCmd(hs)
+		},
 	}
 
 	return cmd

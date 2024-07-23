@@ -14,13 +14,18 @@ func LoadIndex() ([]fileinfo.FileInfo, error) {
 		return nil, err
 	}
 
-	indexPath := filepath.Join(homeDir, ".gencli-index.json")
+	var files []fileinfo.FileInfo
+
+	indexPath := filepath.Join(homeDir, "gencli\\.gencli-index.json")
 	data, err := os.ReadFile(indexPath)
 	if err != nil {
+		if os.IsNotExist(err) {
+			// If the file doesn't exist, it's not an error; it just means no hashes were saved yet.
+			return files, nil
+		}
 		return nil, err
 	}
 
-	var files []fileinfo.FileInfo
 	if err := json.Unmarshal(data, &files); err != nil {
 		return nil, err
 	}
@@ -35,7 +40,7 @@ func StoreIndex(files []fileinfo.FileInfo) error {
 		return err
 	}
 
-	indexPath := filepath.Join(homeDir, ".gencli-index.json")
+	indexPath := filepath.Join(homeDir, "gencli\\.gencli-index.json")
 	jsonData, err := json.MarshalIndent(files, "", "  ")
 	if err != nil {
 		return err

@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"gemini_cli_tool/cli"
+	"gemini_cli_tool/fileinfo"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -16,6 +17,12 @@ const (
 func run() int {
 	// fmt.Println("run..")
 
+	hashSet := fileinfo.NewHashSet() // Initialize the hash set
+	// Load the hash set from file at the start
+	if err := hashSet.LoadFromFile(); err != nil {
+		return 1
+	}
+
 	rootCmd := &cobra.Command{
 		Use:     "gencli",
 		Short:   "Gemini File CLI",
@@ -28,7 +35,7 @@ func run() int {
 
 	// These functions need to written :
 	rootCmd.AddCommand(cli.NewConfigCommand())
-	rootCmd.AddCommand(cli.NewIndexCommand())
+	rootCmd.AddCommand(cli.NewIndexCommand(hashSet))
 	rootCmd.AddCommand(cli.NewSearchCommand())
 	rootCmd.AddCommand(cli.NewSetupCommand())
 
@@ -37,6 +44,12 @@ func run() int {
 		fmt.Println(err)
 		return 1
 	}
+
+	// Save the hash set to file at the end
+	if err := hashSet.SaveToFile(); err != nil {
+		fmt.Printf("Error saving hash set: %v\n", err)
+	}
+
 	return 0
 
 }

@@ -7,15 +7,13 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-
-	"github.com/spf13/cobra"
 )
 
 // var writer = bufio.NewWriter(os.Stdout)
 // var spinners = newSpinner(5, time.Second, writer)
 
-func indexFilesCmd(cmd *cobra.Command, args []string) error {
-	err := indexFiles()
+func indexFilesCmd(hs *fileinfo.HashSet) error {
+	err := indexFiles(hs)
 
 	// spinners.stop()
 
@@ -26,7 +24,7 @@ func indexFilesCmd(cmd *cobra.Command, args []string) error {
 	return err
 }
 
-func indexFiles() error {
+func indexFiles(hs *fileinfo.HashSet) error {
 
 	// spinners.start()
 
@@ -41,9 +39,14 @@ func indexFiles() error {
 	}
 	defaultApiKey := apiKeys[0]
 
-	// files, err := LoadIndex()
+	indexedFiles, err := LoadIndex()
+	if err != nil {
+		return err
+	}
 
-	var files = []fileinfo.FileInfo{}
+	var toIndexFiles = []fileinfo.FileInfo{}
+	var newFiles = []fileinfo.FileInfo{}
+	var finalFiles = []fileinfo.FileInfo{}
 
 	i := 0
 	for _, dir := range config.Directories {
@@ -68,19 +71,18 @@ func indexFiles() error {
 			// fmt.Printf("%t, %t, i: %d, name: %s, dir: %s, size: %d, time: %v", !info.IsDir(), !shouldSkip(info.Name(), config.SkipType, config.SkipFile), i, info.Name(), filepath.Dir(path), info.Size(), info.ModTime())
 
 			if !info.IsDir() && !shouldSkip(info.Name(), config.SkipType, config.SkipFile) {
-				files = append(files, fileinfo.FileInfo{
-					Id:              i,
-					Name:            info.Name(),
-					Directory:       filepath.Dir(path),
-					Size:            info.Size(),
-					ModifiedTime:    info.ModTime(),
-					FileUploaded:    false,
-					UploadedFileUrl: nil,
-				})
+				file := fileinfo.FileInfo{
+					Id:           i,
+					Name:         info.Name(),
+					Directory:    filepath.Dir(path),
+					Size:         info.Size(),
+					ModifiedTime: info.ModTime(),
+					FileUploaded: false,
+				}
 
-				i = i + 1
+				toIndexFiles = append(toIndexFiles, file)
+				i++
 			}
-
 			return nil
 		})
 		if err != nil {
@@ -99,18 +101,59 @@ func indexFiles() error {
 	// 	fmt.Printf("\nFile Name : %s \n", file.Name)
 	// }
 
-	//Generate descriptions using Gemini
-	files = gemini.GenerateDescriptions(files, apiKeys)
+	existingFiles := make(map[string]fileinfo.FileInfo)
 
-	for _, file := range files {
+	for _, file := range indexedFiles {
+		fileHash := fileinfo.GenerateFileHash(file)
+		existingFiles[fileHash] = file
+	}
+
+	print("existingFiles : ")
+
+	for _, file := range toIndexFiles {
 		fmt.Printf("\nFile Size : %d \n", file.Size)
 		fmt.Printf("\nFile Name : %s \n", file.Name)
 		fmt.Printf("\nDescription : %s \n", file.Description)
 	}
 
-	files = gemini.GenerateEmbeddings(files, defaultApiKey)
+	// Identify deleted files
+	for _, file := range toIndexFiles {
+		fileHash := fileinfo.GenerateFileHash(file)
+		if _, exists := existingFiles[fileHash]; exists {
+			finalFiles = append(finalFiles, existingFiles[fileHash])
+		} else {
+			hs.Remove(fileHash)
+		}
+	}
 
-	if err := StoreIndex(files); err != nil {
+	// Identify new files
+	for _, file := range toIndexFiles {
+		fileHash := fileinfo.GenerateFileHash(file)
+		if !hs.Exists(fileHash) {
+			newFiles = append(newFiles, file)
+			hs.Add(fileHash) // Add hash to the set
+			fmt.Printf("\nNot Skipping file %s\\%s\n", file.Directory, file.Name)
+		} else {
+			fmt.Printf("\nSkipping file %s\\%s\n", file.Directory, file.Name)
+
+		}
+	}
+
+	//Generate descriptions using Gemini
+	newFiles = gemini.GenerateDescriptions(newFiles, apiKeys, hs)
+	newFiles = gemini.GenerateEmbeddings(newFiles, defaultApiKey)
+
+	finalFiles = append(finalFiles, newFiles...)
+
+	print("finalFiles : ")
+
+	for _, file := range finalFiles {
+		fmt.Printf("\nFile Size : %d \n", file.Size)
+		fmt.Printf("\nFile Name : %s \n", file.Name)
+		fmt.Printf("\nDescription : %s \n", file.Description)
+	}
+
+	if err := StoreIndex(finalFiles); err != nil {
 		return fmt.Errorf("failed to store index : %w", err)
 	}
 

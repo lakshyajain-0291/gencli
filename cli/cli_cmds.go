@@ -74,7 +74,13 @@ func (c *systemCommand) run(message string) bool {
 			c.print(fmt.Sprintf("Set style to %s.", style))
 
 		} else if strings.HasPrefix(message, systemCmdIndex) {
-			err := indexFiles()
+			hashSet := fileinfo.NewHashSet() // Initialize the hash set
+			// Load the hash set from file at the start
+			if err := hashSet.LoadFromFile(); err != nil {
+				return true
+			}
+
+			err := indexFiles(hashSet)
 			// spinners.stop()
 			if err != nil {
 				c.print(err.Error())

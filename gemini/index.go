@@ -30,7 +30,7 @@ const (
 	timeOutDuration       = 20 * time.Second
 )
 
-func GenerateDescriptions(files []fileinfo.FileInfo, apiKeys []string) []fileinfo.FileInfo {
+func GenerateDescriptions(files []fileinfo.FileInfo, apiKeys []string, hs *fileinfo.HashSet) []fileinfo.FileInfo {
 	// Create a buffered writer for the spinner output
 	// writer := bufio.NewWriterSize(os.Stdout, 0)
 	// spinner := fileinfo.NewSpinner(20, 100*time.Millisecond, writer)
@@ -66,7 +66,8 @@ func GenerateDescriptions(files []fileinfo.FileInfo, apiKeys []string) []fileinf
 	// var currentTokens int
 
 	for _, file := range files {
-		if /*currentTokens+int(tokens) > maxTokensPerRequest ||*/ len(batch) >= maxFilesPerBatch {
+
+		if len(batch) >= maxFilesPerBatch {
 			fileCh <- batch
 			batch = []fileinfo.FileInfo{}
 			// currentTokens = 0
