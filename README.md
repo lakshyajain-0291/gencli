@@ -21,7 +21,7 @@ A gemini powered interactable CLI tool that keeps record of all your files and c
 
 3. Set up your Gemini API Keys :
    ```bash
-   ./gencli config --add-apikeys "<your-api-key-1>","<your-api-key-1>"
+   ./gencli config --add-apikeys "<your-api-key-1>","<your-api-key-2>"
    ```
 
 4. Set up directories to Index :
