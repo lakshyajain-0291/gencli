@@ -11,9 +11,10 @@ import (
 func searchFilesCmd(cmd *cobra.Command, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no search query provided")
-	} else {
-		fmt.Print(args[0])
 	}
+	//   else {
+	// 	fmt.Print(args[0])
+	// }
 
 	query := args[0]
 

@@ -2,7 +2,6 @@ package gemini
 
 import (
 	"context"
-	"fmt"
 	"gemini_cli_tool/fileinfo"
 	"math"
 
@@ -12,12 +11,12 @@ import (
 func SearchRelevantFiles(files []fileinfo.FileInfo, query string, relevanceIndex float32, defaultApiKey string) (int, error) {
 	ctx := context.Background()
 
-	setupSession, err := NewsetupSession(ctx, defaultApiKey)
+	chatSession, err := NewchatSession(ctx, defaultApiKey)
 	if err != nil {
 		return -1, err
 	}
 
-	em := setupSession.client.EmbeddingModel("text-embedding-004")
+	em := chatSession.client.EmbeddingModel("text-embedding-004")
 	res, err := em.EmbedContent(ctx, genai.Text(query))
 	if err != nil {
 		return -1, err
@@ -32,7 +31,7 @@ func SearchRelevantFiles(files []fileinfo.FileInfo, query string, relevanceIndex
 	for i, file := range files {
 		similarity := cosineSimilarity(file.Embedding, queryEmbedding)
 
-		fmt.Printf("\n||Similarity With %s : %f||\n", file.Name, similarity)
+		// fmt.Printf("\n||Similarity With %s : %f||\n", file.Name, similarity)
 
 		if similarity > maxSimilarity && file.Description != "" {
 			maxSimilarity = similarity

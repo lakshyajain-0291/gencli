@@ -7,7 +7,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var opts setupOpts
+var opts chatOpts
 
 func NewConfigCommand() *cobra.Command {
 	var addDirectories []string
@@ -23,7 +23,8 @@ func NewConfigCommand() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "config",
-		Short: "Set configurations for the indexing",
+		Short: "Set configurations for indexing",
+
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if showConfig {
 				config, err := LoadConfig()
@@ -86,11 +87,35 @@ func NewSearchCommand() *cobra.Command {
 	return cmd
 }
 
-func NewSetupCommand() *cobra.Command {
+func NewChatCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "setup",
-		Short: "Starts a new setup session",
-		RunE:  startsetup,
+		Use:   "chat",
+		Short: "Gives you a Chatting platform with alot of functionalities",
+		Long: `
+-----------------------------------------------------------------------------------------------------------------
+Gives you a Chatting platform with alot of functionalities
+		
+Functionalities:
+	- Command Prefix       : "$"                   (All system commands start with this prefix)
+	- Quit Command         : "$quit"               (Exits the CLI application)
+	- Purge History        : "$purge"              (Clears the command history)
+	- Toggle Input Mode    : "$mode"               (Switches between single-line and multi-line input modes)
+	- Toggle Output Format : "$format"             (Enables or disables formatted output)
+	- Set Style            : "$style <style_name>" (Sets the output style.)
+	- Index Files          : "$index"              (Indexes files in the specified directory for search purposes)
+	- Search Files         : "$search <query>"     (Searches indexed files based on the provided query)
+ 
+Different styles include:
+	- AsciiStyle           : "ascii"               (ASCII-art inspired style)
+	- AutoStyle            : "auto"                (Automatically selects the best style based on the terminal)
+	- DarkStyle            : "dark"                (Dark theme with high contrast)
+	- DraculaStyle	       : "dracula"             (Inspired by the Dracula color scheme)
+	- TokyoNightStyle      : "tokyo-night"         (Inspired by the Tokyo Night color scheme)
+	- LightStyle	       : "light"               (Light theme for bright environments)
+	- NoTTYStyle	       : "notty"               (No TTY output style, minimal formatting)
+	- PinkStyle            : "pink"                (A playful pink color scheme)
+-----------------------------------------------------------------------------------------------------------------`,
+		RunE: startchat,
 	}
 
 	cmd.Flags().BoolVarP(&opts.Format, "format", "f", true, "render markdown-formatted response")

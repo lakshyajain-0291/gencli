@@ -1,9 +1,9 @@
 package gemini
 
 import (
-	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"math"
 	"mime"
 	"net/http"
@@ -45,9 +45,9 @@ func GenerateDescriptions(files []fileinfo.FileInfo, apiKeys []string, hs *filei
 	var sessions []*Session
 
 	for _, apikey := range apiKeys {
-		session, err := NewsetupSession(ctx, apikey)
+		session, err := NewchatSession(ctx, apikey)
 		if err != nil {
-			fmt.Println("Failed to start new setup session with Gemini:", err)
+			fmt.Println("Failed to start new chat session with Gemini:", err)
 			return files
 		}
 
@@ -257,7 +257,7 @@ func getDefaultPrompt(file fileinfo.FileInfo) ([]genai.Part, error) {
 
 	// model := session.client.GenerativeModel("gemini-1.5-flash")
 	prompt := []genai.Part{
-		genai.Text(fmt.Sprintf("Generate a description in less than 100 words about what this file is and what is it about, based on the meta data given : \n\nFile Id : %d\nFile Path : %s\nFile Size : %d\nFile Modified Time : %v", file.Id, filePath, file.Size, file.ModifiedTime)),
+		genai.Text(fmt.Sprintf("Using your comprehensive knowledge, generate a detailed and informative description in less than 200 words that accurately summarizes the content and purpose of this file. Consider all available metadata and context to provide insights into what this file is, its potential use, and its significance. Use the following metadata to guide your description:\n\n- File Id: %d\n- File Path: %s\n- File Size: %d bytes\n- Last Modified: %v\n\nPlease ensure the description is concise yet thorough.", file.Id, filePath, file.Size, file.ModifiedTime)),
 	}
 
 	return prompt, nil
@@ -265,43 +265,72 @@ func getDefaultPrompt(file fileinfo.FileInfo) ([]genai.Part, error) {
 }
 
 func handleTextFile(file fileinfo.FileInfo) ([]genai.Part, error) {
-
 	filePath := filepath.Join(file.Directory, file.Name)
 
-	content, err := os.ReadFile(filePath)
+	// Open the file for reading
+	fileHandle, err := os.Open(filePath)
 	if err != nil {
 		return nil, err
 	}
+	defer fileHandle.Close()
 
-	// model := session.client.GenerativeModel("gemini-1.5-flash")
-	prompt := []genai.Part{
-		genai.Text(fmt.Sprintf("Generate a description in less than 100 words about what this file is and what is it about, based on the given content for file Id , %d: \n\n%s", file.Id, string(content))),
+	// buffer size (4KB) to limit memory usage
+	bufferSize := 4096
+	buffer := make([]byte, bufferSize)
+
+	// Reading the first chunk of the file content
+	n, err := fileHandle.Read(buffer)
+	if err != nil && err != io.EOF {
+		return nil, err
 	}
 
-	return prompt, err
+	// Convert the read bytes into a string
+	contentSnippet := string(buffer[:n])
+
+	// Create the prompt using the snippet
+	prompt := []genai.Part{
+		genai.Text(fmt.Sprintf(
+			"Using the provided text snippet, generate a detailed and insightful description in less than 200 words that captures the essence, purpose, and key topics of this file.\n\nFile Id: %d\n- File Path: %s\n- File Size: %d bytes\n- Last Modified: %v\n\nPlease ensure the description is concise yet thorough.\n\nContent Snippet: \n\n%s\n\nIf relevant, infer the file's broader context or potential uses.",
+			file.Id, filePath, file.Size, file.ModifiedTime, contentSnippet)),
+	}
+
+	return prompt, nil
 }
 
 func handlePdfFile(file fileinfo.FileInfo) ([]genai.Part, error) {
 	filePath := filepath.Join(file.Directory, file.Name)
 
+	// Opening the PDF file
 	r, err := pdf.Open(filePath)
 	if err != nil {
 		return nil, err
 	}
-	var buf bytes.Buffer
+
+	// Getting plain text from PDF
 	b, err := r.GetPlainText()
 	if err != nil {
 		return nil, err
 	}
-	buf.ReadFrom(b)
-	content := buf.String()
+	// defer r.Close()
 
-	prompt := []genai.Part{
-		genai.Text(fmt.Sprintf("Generate a description in less than 100 words about what this file is and what is it about, based on the given content for file Id, %d : \n\n%s", file.Id, content)),
+	// Read only the first portion of the text to avoid large memory usage
+	bufferSize := 4096
+	buffer := make([]byte, bufferSize)
+
+	n, err := b.Read(buffer)
+	if err != nil && err != io.EOF {
+		return nil, err
 	}
 
-	return prompt, err
+	// Convert the read bytes into a string
+	contentSnippet := string(buffer[:n])
 
+	// Create the prompt using the snippet
+	prompt := []genai.Part{
+		genai.Text(fmt.Sprintf("From the provided PDF content snippet, generate an in-depth description in less than 200 words that highlights the main themes, purpose, and possible applications of this document. File Id: %dd\n- File Path: %s\n- File Size: %d bytes\n- Last Modified: %v\n\n. Content Snippet: \n\n%s\n\nAdditionally, consider the document's structure or any inferred context.", file.Id, filePath, file.Size, file.ModifiedTime, contentSnippet)),
+	}
+	// fmt.Println(prompt[0])
+	return prompt, nil
 }
 
 func handleImageFile(session *Session, file *fileinfo.FileInfo) ([]genai.Part, error) {
@@ -355,7 +384,7 @@ func processUploadedImage(file fileinfo.FileInfo, uploadedFile *genai.File) ([]g
 
 	prompt := []genai.Part{
 		genai.FileData{URI: uploadedFile.URI},
-		genai.Text(fmt.Sprintf("Generate a description in less than 100 words about what this file is and what is it about , file Id is %d", file.Id)),
+		genai.Text(fmt.Sprintf("Generate a rich and detailed description in less than 200 words about the subject, context, and potential significance of this image file. Consider its visual elements, style, and possible context. File Id: %d\n- File Name: %s\n- File Size: %d bytes\n- Last Modified: %v\n\n", file.Id, file.Name, file.Size, file.ModifiedTime)),
 	}
 
 	return prompt, nil
@@ -459,7 +488,7 @@ func processUploadedVideo(file fileinfo.FileInfo, uploadedFile *genai.File) ([]g
 	// model := session.client.GenerativeModel("gemini-1.5-flash")
 	prompt := []genai.Part{
 		genai.FileData{URI: uploadedFile.URI},
-		genai.Text(fmt.Sprintf("Generate a description in less than 100 words about what this file is and what is it about, based on the video file whose Id is %d", file.Id)),
+		genai.Text(fmt.Sprintf("Generate a well-rounded description in less than 200 words about what this video file likely depicts and its possible purpose. Use your knowledge to interpret the content and any associated metadata. The file Id is %d\n- File Name: %s\n- File Size: %d bytes\n- Last Modified: %v\n\n", file.Id, file.Name, file.Size, file.ModifiedTime)),
 	}
 
 	return prompt, nil
@@ -470,9 +499,9 @@ func GenerateEmbeddings(files []fileinfo.FileInfo, defaultApiKey string) []filei
 
 	ctx := context.Background()
 
-	session, err := NewsetupSession(ctx, defaultApiKey)
+	session, err := NewchatSession(ctx, defaultApiKey)
 	if err != nil {
-		fmt.Println("Failed to start new setup session with Gemini:", err)
+		fmt.Println("Failed to start new chat session with Gemini:", err)
 		return files
 	}
 
@@ -537,10 +566,10 @@ func GenerateEmbeddings(files []fileinfo.FileInfo, defaultApiKey string) []filei
 	return processedFiles
 }
 
-func GenerateEmbedding(setupSession *Session, desc string) ([]float32, error) {
+func GenerateEmbedding(chatSession *Session, desc string) ([]float32, error) {
 
-	em := setupSession.client.EmbeddingModel("text-embedding-004")
-	embeddingResult, err := em.EmbedContent(setupSession.ctx, genai.Text(desc))
+	em := chatSession.client.EmbeddingModel("text-embedding-004")
+	embeddingResult, err := em.EmbedContent(chatSession.ctx, genai.Text(desc))
 	if err != nil {
 		return nil, err
 	}

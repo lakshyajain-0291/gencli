@@ -24,9 +24,18 @@ func run() int {
 	}
 
 	rootCmd := &cobra.Command{
-		Use:     "gencli",
-		Short:   "Gemini File CLI",
-		Long:    "Gemini Based interactable file manager CLI ",
+		Use:   "gencli",
+		Short: "Gemini File CLI",
+		Long: `
+-----------------------------------------------------------------------------------------------------------------
+Welcome to the Gemini-based interactive CLI tool!
+
+This versatile command-line interface is designed to enhance your file management experience with :
+		
+	- Chat   : Engage in intelligent conversations with your ternimal.
+	- Index  : Efficiently index your files for faster search and retrieval.
+	- Search : Perform detailed searches to quickly find the files you need.
+-----------------------------------------------------------------------------------------------------------------`,
 		Version: version,
 		Run: func(cmd *cobra.Command, arg []string) {
 			fmt.Println("Welcome to gencli")
@@ -37,7 +46,7 @@ func run() int {
 	rootCmd.AddCommand(cli.NewConfigCommand())
 	rootCmd.AddCommand(cli.NewIndexCommand(hashSet))
 	rootCmd.AddCommand(cli.NewSearchCommand())
-	rootCmd.AddCommand(cli.NewSetupCommand())
+	rootCmd.AddCommand(cli.NewChatCommand())
 
 	err := rootCmd.Execute()
 	if err != nil {

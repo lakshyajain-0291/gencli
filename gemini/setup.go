@@ -13,7 +13,7 @@ type Session struct {
 	session *genai.ChatSession
 }
 
-func NewsetupSession(ctx context.Context, apiKey string) (*Session, error) {
+func NewchatSession(ctx context.Context, apiKey string) (*Session, error) {
 
 	client, err := genai.NewClient(ctx, option.WithAPIKey(apiKey))
 	if err != nil {
@@ -22,11 +22,11 @@ func NewsetupSession(ctx context.Context, apiKey string) (*Session, error) {
 	return &Session{
 		ctx:     ctx,
 		client:  client,
-		session: client.GenerativeModel("gemini-flash").StartChat(),
+		session: client.GenerativeModel("gemini-1.5-flash").StartChat(),
 	}, nil
 }
 
-// SendMessage sends a request to the model as part of a setup session.
+// SendMessage sends a request to the model as part of a chat session.
 func (c *Session) SendMessage(input string) (*genai.GenerateContentResponse, error) {
 	return c.session.SendMessage(c.ctx, genai.Text(input))
 }
@@ -36,7 +36,7 @@ func (c *Session) SendMessageStream(input string) *genai.GenerateContentResponse
 	return c.session.SendMessageStream(c.ctx, genai.Text(input))
 }
 
-// ClearHistory clears setup history
+// ClearHistory clears chat history
 func (c *Session) ClearHistory() {
 	c.session.History = make([]*genai.Content, 0)
 }

@@ -13,21 +13,21 @@ import (
 	"github.com/spf13/cobra"
 )
 
-type setupOpts struct {
+type chatOpts struct {
 	Format     bool
 	Style      string
 	Multiline  bool
 	Terminator string
 }
 
-type setup struct {
+type chat struct {
 	session *gemini.Session
 	prompt  *prompt
 	reader  *readline.Instance
-	opts    *setupOpts
+	opts    *chatOpts
 }
 
-func startsetup(cmd *cobra.Command, arg []string) error {
+func startchat(cmd *cobra.Command, arg []string) error {
 
 	// Set the default API key
 	config, err := LoadConfig()
@@ -40,24 +40,25 @@ func startsetup(cmd *cobra.Command, arg []string) error {
 		return fmt.Errorf("no apikeys provided")
 	}
 	defaultApiKey := apiKeys[0]
+	// fmt.Println("API : ", defaultApiKey)
 
-	setupSession, err := gemini.NewsetupSession(context.Background(), defaultApiKey)
+	chatSession, err := gemini.NewchatSession(context.Background(), defaultApiKey)
 	if err != nil {
 		// return err
-		return fmt.Errorf("failed to initialize setup session: %w", err)
+		return fmt.Errorf("failed to initialize chat session: %w", err)
 	}
 
-	setup, err := Newsetup(getCurrentUser(), setupSession, &opts)
+	chat, err := Newchat(getCurrentUser(), chatSession, &opts)
 	if err != nil {
 		// return err
-		return fmt.Errorf("failed to create setup instance: %w", err)
+		return fmt.Errorf("failed to create chat instance: %w", err)
 	}
 
-	// fmt.Println("Starting setup interface...")
-	setup.Start()
+	// fmt.Println("Starting chat interface...")
+	chat.Start()
 
-	// fmt.Println("Closing setup session...")
-	setupSession.Close()
+	// fmt.Println("Closing chat session...")
+	chatSession.Close()
 
 	return nil
 }
@@ -70,8 +71,8 @@ func getCurrentUser() string {
 	return currentUser.Username
 }
 
-func Newsetup(user string, session *gemini.Session, opts *setupOpts) (*setup, error) {
-	// fmt.Println("Creating setup reader...")
+func Newchat(user string, session *gemini.Session, opts *chatOpts) (*chat, error) {
+	// fmt.Println("Creating chat reader...")
 
 	reader, err := readline.NewEx(&readline.Config{})
 	if err != nil {
@@ -87,8 +88,8 @@ func Newsetup(user string, session *gemini.Session, opts *setupOpts) (*setup, er
 		reader.HistoryDisable()
 	}
 
-	// fmt.Println("setup instance created.")
-	return &setup{
+	// fmt.Println("chat instance created.")
+	return &chat{
 		session: session,
 		prompt:  prompt,
 		reader:  reader,
@@ -96,8 +97,8 @@ func Newsetup(user string, session *gemini.Session, opts *setupOpts) (*setup, er
 	}, nil
 }
 
-func (c *setup) Start() {
-	// fmt.Println("setup started. Type 'exit' to quit.")
+func (c *chat) Start() {
+	// fmt.Println("chat started. Type 'exit' to quit.")
 	for {
 		message, ok := c.read()
 		if !ok {
@@ -112,14 +113,14 @@ func (c *setup) Start() {
 	}
 }
 
-func (c *setup) read() (string, bool) {
+func (c *chat) read() (string, bool) {
 	if c.opts.Multiline {
 		return c.readMultiLine()
 	}
 	return c.readLine()
 }
 
-func (c *setup) readMultiLine() (string, bool) {
+func (c *chat) readMultiLine() (string, bool) {
 	var builder strings.Builder
 
 	term := c.opts.Terminator
@@ -147,7 +148,7 @@ func (c *setup) readMultiLine() (string, bool) {
 
 }
 
-func (c *setup) readLine() (string, bool) {
+func (c *chat) readLine() (string, bool) {
 
 	// fmt.Println("Reading single-line input...")
 	input, err := c.reader.Readline()
@@ -159,7 +160,7 @@ func (c *setup) readLine() (string, bool) {
 	return validateInput(input)
 }
 
-func (c *setup) parseCommand(message string) command {
+func (c *chat) parseCommand(message string) command {
 
 	// fmt.Printf("Parsing command: %s\n", message)
 	if strings.HasPrefix(message, systemCmdPrefix) {
@@ -168,7 +169,7 @@ func (c *setup) parseCommand(message string) command {
 	return newGeminiCommand(c)
 }
 
-func (c *setup) handleReadError(input string, err error) (string, bool) {
+func (c *chat) handleReadError(input string, err error) (string, bool) {
 	if errors.Is(err, readline.ErrInterrupt) {
 		if len(input) == 0 {
 			return systemCmdQuit, true

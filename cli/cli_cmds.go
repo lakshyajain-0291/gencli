@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/charmbracelet/glamour"
+	// "github.com/charmbracelet/glamour/ansi"
+
 	"google.golang.org/api/iterator"
 )
 
@@ -29,14 +31,14 @@ type command interface {
 }
 
 type systemCommand struct {
-	setup *setup
+	chat *chat
 }
 
 var _ command = (*systemCommand)(nil)
 
-func newSystemCommand(setup *setup) command {
+func newSystemCommand(chat *chat) command {
 	return &systemCommand{
-		setup: setup,
+		chat: chat,
 	}
 }
 
@@ -48,29 +50,29 @@ func (c *systemCommand) run(message string) bool {
 		return true
 
 	case systemCmdPurgeHistory:
-		c.setup.session.ClearHistory()
-		c.print("Cleared the setup history.")
+		c.chat.session.ClearHistory()
+		c.print("Cleared the chat history.")
 
 	case systemCmdToggleInputMode:
-		if c.setup.opts.Multiline {
-			c.setup.reader.HistoryEnable()
-			c.setup.opts.Multiline = false
+		if c.chat.opts.Multiline {
+			c.chat.reader.HistoryEnable()
+			c.chat.opts.Multiline = false
 			c.print("Switched to single-line input mode.")
 		} else {
-			c.setup.reader.HistoryDisable()
-			c.setup.opts.Multiline = true
+			c.chat.reader.HistoryDisable()
+			c.chat.opts.Multiline = true
 			c.print("Switched to Multi-line input mode.")
 
 		}
 
 	case systemCmdToggleFormat:
-		c.setup.opts.Format = !c.setup.opts.Format
-		c.print(fmt.Sprintf("Toggled format to %v.", c.setup.opts.Format))
+		c.chat.opts.Format = !c.chat.opts.Format
+		c.print(fmt.Sprintf("Toggled format to %v.", c.chat.opts.Format))
 
 	default:
 		if strings.HasPrefix(message, systemCmdSetStyle) {
 			style := strings.TrimPrefix(message, systemCmdSetStyle+" ")
-			c.setup.opts.Style = style
+			c.chat.opts.Style = style
 			c.print(fmt.Sprintf("Set style to %s.", style))
 
 		} else if strings.HasPrefix(message, systemCmdIndex) {
@@ -109,21 +111,21 @@ func (c *systemCommand) run(message string) bool {
 }
 
 func (c *systemCommand) print(message string) {
-	fmt.Printf("%s%s\n\n", c.setup.prompt.cli, message)
+	fmt.Printf("%s%s\n\n", c.chat.prompt.cli, message)
 }
 
 type geminiCommand struct {
-	setup   *setup
+	chat    *chat
 	spinner *fileinfo.Spinner
 	writer  *bufio.Writer
 }
 
 var _ command = (*geminiCommand)(nil)
 
-func newGeminiCommand(setup *setup) command {
+func newGeminiCommand(chat *chat) command {
 	writer := bufio.NewWriter(os.Stdout)
 	return &geminiCommand{
-		setup:   setup,
+		chat:    chat,
 		spinner: fileinfo.NewSpinner(5, time.Second, writer),
 		writer:  writer,
 	}
@@ -131,10 +133,10 @@ func newGeminiCommand(setup *setup) command {
 
 // run implements command.
 func (g *geminiCommand) run(message string) bool {
-	g.printFlush(g.setup.prompt.gemini)
+	g.printFlush(g.chat.prompt.gemini)
 	g.spinner.Start()
 
-	if g.setup.opts.Format {
+	if g.chat.opts.Format {
 		g.runBlocking(message)
 	} else {
 		g.runStreaming(message)
@@ -146,36 +148,68 @@ func (g *geminiCommand) run(message string) bool {
 func (g *geminiCommand) runBlocking(message string) {
 	// fmt.Println("Giving formatted output")
 
-	response, err := g.setup.session.SendMessage(message)
+	response, err := g.chat.session.SendMessage(message)
 	g.spinner.Stop()
-
+	// fmt.Println("Spinner stopped")
 	if err != nil {
 		fmt.Print(Red(err.Error()))
 	} else {
 		var builder strings.Builder
-
 		for _, candidate := range response.Candidates {
 			for _, part := range candidate.Content.Parts {
 				builder.WriteString(fmt.Sprintf("%s", part))
 			}
 		}
 
-		output, err := glamour.Render(builder.String(), g.setup.opts.Style)
+		// Get the selected style
+		output, err := glamour.Render(builder.String(), g.chat.opts.Style)
 		if err != nil {
 			fmt.Printf(Red("Failed to format : %s\n"), err)
-			g.setup.opts.Format = false
+			g.chat.opts.Format = false
 			fmt.Println((builder.String()))
 			return
 		}
-
 		fmt.Print(output)
 	}
+
+	// // Check if chat is nil
+	// if g.chat == nil {
+	// 	fmt.Println("Chat is nil. Make sure it is properly initialized.")
+	// 	return
+	// }
+
+	// // Check if session is nil
+	// if g.chat.session == nil {
+	// 	fmt.Println("Session is nil. Make sure it is properly initialized.")
+	// 	return
+	// }
+
+	// // Print the session details for debugging
+	// fmt.Printf("Session details: %+v\n", g.chat.session)
+
+	// if err != nil {
+	// 	// If the error is from SendMessage, print it out
+	// 	fmt.Println("Error sending message to Gemini API:", err)
+
+	// 	// Add more context to the error if possible
+	// 	if strings.Contains(err.Error(), "404") {
+	// 		fmt.Println("The endpoint was not found. Check the API URL and endpoint path.")
+	// 	} else if strings.Contains(err.Error(), "403") {
+	// 		fmt.Println("Authentication failed. Check your API key or token.")
+	// 	} else if strings.Contains(err.Error(), "500") {
+	// 		fmt.Println("Server error. The Gemini API might be down.")
+	// 	} else {
+	// 		fmt.Println("An unknown error occurred.")
+	// 	}
+
+	// 	return
+	// }
 }
 
 func (g *geminiCommand) runStreaming(message string) {
-	// fmt.Println("Giving streaming output")
+	fmt.Println("Giving streaming output")
 
-	responseIterator := g.setup.session.SendMessageStream(message)
+	responseIterator := g.chat.session.SendMessageStream(message)
 	g.spinner.Stop()
 	for {
 		response, err := responseIterator.Next()

@@ -108,13 +108,13 @@ func indexFiles(hs *fileinfo.HashSet) error {
 		existingFiles[fileHash] = file
 	}
 
-	print("existingFiles : ")
+	// print("existingFiles : ")
 
-	for _, file := range toIndexFiles {
-		fmt.Printf("\nFile Size : %d \n", file.Size)
-		fmt.Printf("\nFile Name : %s \n", file.Name)
-		fmt.Printf("\nDescription : %s \n", file.Description)
-	}
+	// for _, file := range toIndexFiles {
+	// 	fmt.Printf("\nFile Size : %d \n", file.Size)
+	// 	fmt.Printf("\nFile Name : %s \n", file.Name)
+	// 	fmt.Printf("\nDescription : %s \n", file.Description)
+	// }
 
 	// Identify deleted files
 	for _, file := range toIndexFiles {
@@ -132,9 +132,9 @@ func indexFiles(hs *fileinfo.HashSet) error {
 		if !hs.Exists(fileHash) {
 			newFiles = append(newFiles, file)
 			hs.Add(fileHash) // Add hash to the set
-			fmt.Printf("\nNot Skipping file %s\\%s\n", file.Directory, file.Name)
+			// fmt.Printf("\nNot Skipping file %s\\%s\n", file.Directory, file.Name)
 		} else {
-			fmt.Printf("\nSkipping file %s\\%s\n", file.Directory, file.Name)
+			// fmt.Printf("\nSkipping file %s\\%s\n", file.Directory, file.Name)
 
 		}
 	}
@@ -145,13 +145,13 @@ func indexFiles(hs *fileinfo.HashSet) error {
 
 	finalFiles = append(finalFiles, newFiles...)
 
-	print("finalFiles : ")
+	// print("finalFiles : ")
 
-	for _, file := range finalFiles {
-		fmt.Printf("\nFile Size : %d \n", file.Size)
-		fmt.Printf("\nFile Name : %s \n", file.Name)
-		fmt.Printf("\nDescription : %s \n", file.Description)
-	}
+	// for _, file := range finalFiles {
+	// 	fmt.Printf("\nFile Size : %d \n", file.Size)
+	// 	fmt.Printf("\nFile Name : %s \n", file.Name)
+	// 	fmt.Printf("\nDescription : %s \n", file.Description)
+	// }
 
 	if err := StoreIndex(finalFiles); err != nil {
 		return fmt.Errorf("failed to store index : %w", err)
