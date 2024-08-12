@@ -82,7 +82,7 @@ func GenerateDescriptions(files []fileinfo.FileInfo, apiKeys []string, hs *filei
 	close(fileCh)
 
 	var wg sync.WaitGroup
-	fmt.Println("Starting concurrent processing with", maxConcurrentRequests, "goroutines")
+	// fmt.Println("Starting concurrent processing with", maxConcurrentRequests, "goroutines")
 
 	for i := 0; i < maxConcurrentRequests; i++ {
 		wg.Add(1)
@@ -392,12 +392,12 @@ func processUploadedImage(file fileinfo.FileInfo, uploadedFile *genai.File) ([]g
 
 func handleVideoFile(session *Session, file *fileinfo.FileInfo) ([]genai.Part, error) {
 	if file.Size > 50*1024*1024 {
-		fmt.Println("File too big .. calling default func")
+		// fmt.Println("File too big .. calling default func")
 		return getDefaultPrompt(*file)
 	}
 
 	if file.FileUploaded {
-		fmt.Println("Already uploaded .. moving to processing..")
+		// fmt.Println("Already uploaded .. moving to processing..")
 		return processUploadedVideo(*file, file.UploadedFileUrl)
 	}
 
@@ -557,7 +557,7 @@ func GenerateEmbeddings(files []fileinfo.FileInfo, defaultApiKey string) []filei
 
 	wg.Wait()
 	close(resultCh)
-	fmt.Println("All goroutines have finished processing")
+	// fmt.Println("All goroutines have finished processing")
 
 	var processedFiles []fileinfo.FileInfo
 	for file := range resultCh {

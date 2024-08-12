@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"gemini_cli_tool/fileinfo"
 	"os"
 	"path/filepath"
 )
@@ -77,7 +78,7 @@ func setConfig(addDirectories, deleteDirectories, addSkipTypes, deleteSkipTypes,
 		return fmt.Errorf("failed to save config : %w", err)
 	}
 
-	fmt.Println("Configurations Saved Successfully")
+	fmt.Println(fileinfo.Green("Configurations Saved Successfully"))
 	return nil
 }
 
@@ -139,9 +140,11 @@ func SaveConfig(config *ConfigData) error {
 func showConfigFormatted(config *ConfigData) {
 	configBytes, err := json.MarshalIndent(config, "", "  ")
 	if err != nil {
-		fmt.Printf("Failed to format config: %v\n", err)
+		fmt.Println(fileinfo.Red(fmt.Sprintf("Failed to format config: %v\n", err)))
 		return
 	}
-	fmt.Printf("Current Configuration:\n%s\n", string(configBytes))
+	fmt.Println(fileinfo.Cyan("----------------------------------------------------------------------------------------------------------------------------------\n"))
+	fmt.Printf("%s\n%s\n", fileinfo.Green("\nCurrent Configuration :\n"), fileinfo.Gray(string(configBytes)))
+	fmt.Println(fileinfo.Cyan("\n----------------------------------------------------------------------------------------------------------------------------------\n"))
 
 }

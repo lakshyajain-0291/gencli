@@ -1,4 +1,4 @@
-package cli
+package fileinfo
 
 import (
 	"fmt"
@@ -25,47 +25,47 @@ const (
 )
 
 // prompt will be like gemini> or cli>
-type prompt struct {
-	user     string
-	userNext string
-	gemini   string
-	cli      string
+type Prompt struct {
+	User     string
+	UserNext string
+	Gemini   string
+	Cli      string
 }
 
-type promtColor struct {
+type PromtColor struct {
 	user   func(string) string
 	gemini func(string) string
 	cli    func(string) string
 }
 
-func newPromptColor() *promtColor {
+func newPromptColor() *PromtColor {
 	// fmt.Println("newPromptColor.")
 
 	if termenv.HasDarkBackground() {
-		return &promtColor{
+		return &PromtColor{
 			user:   Green,
 			gemini: Cyan,
 			cli:    Yellow,
 		}
 	}
-	return &promtColor{
+	return &PromtColor{
 		user:   Green,
 		gemini: Blue,
 		cli:    Magenta,
 	}
 }
 
-func newPrompt(currentUser string) *prompt {
+func NewPrompt(currentUser string) *Prompt {
 	fmt.Println("")
 
 	// maxLength := (currentUser, geminiUser, cliUser)
 	pc := newPromptColor()
 
-	return &prompt{
-		user:     pc.user(buildPrompt(currentUser)),
-		userNext: pc.user(buildPrompt(strings.Repeat(" ", len(currentUser)))),
-		gemini:   pc.gemini(buildPrompt(geminiUser)),
-		cli:      pc.cli(buildPrompt(cliUser)),
+	return &Prompt{
+		User:     pc.user(buildPrompt(currentUser)),
+		UserNext: pc.user(buildPrompt(strings.Repeat(" ", len(currentUser)))),
+		Gemini:   pc.gemini(buildPrompt(geminiUser)),
+		Cli:      pc.cli(buildPrompt(cliUser)),
 	}
 }
 

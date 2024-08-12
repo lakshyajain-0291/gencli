@@ -111,7 +111,7 @@ func (c *systemCommand) run(message string) bool {
 }
 
 func (c *systemCommand) print(message string) {
-	fmt.Printf("%s%s\n\n", c.chat.prompt.cli, message)
+	fmt.Printf("%s%s\n\n", c.chat.prompt.Cli, message)
 }
 
 type geminiCommand struct {
@@ -133,7 +133,7 @@ func newGeminiCommand(chat *chat) command {
 
 // run implements command.
 func (g *geminiCommand) run(message string) bool {
-	g.printFlush(g.chat.prompt.gemini)
+	g.printFlush(g.chat.prompt.Gemini)
 	g.spinner.Start()
 
 	if g.chat.opts.Format {
@@ -152,7 +152,7 @@ func (g *geminiCommand) runBlocking(message string) {
 	g.spinner.Stop()
 	// fmt.Println("Spinner stopped")
 	if err != nil {
-		fmt.Print(Red(err.Error()))
+		fmt.Print(fileinfo.Red(err.Error()))
 	} else {
 		var builder strings.Builder
 		for _, candidate := range response.Candidates {
@@ -164,7 +164,7 @@ func (g *geminiCommand) runBlocking(message string) {
 		// Get the selected style
 		output, err := glamour.Render(builder.String(), g.chat.opts.Style)
 		if err != nil {
-			fmt.Printf(Red("Failed to format : %s\n"), err)
+			fmt.Printf(fileinfo.Red("Failed to format : %s\n"), err)
 			g.chat.opts.Format = false
 			fmt.Println((builder.String()))
 			return
@@ -207,7 +207,7 @@ func (g *geminiCommand) runBlocking(message string) {
 }
 
 func (g *geminiCommand) runStreaming(message string) {
-	fmt.Println("Giving streaming output")
+	// fmt.Println("Giving streaming output")
 
 	responseIterator := g.chat.session.SendMessageStream(message)
 	g.spinner.Stop()
@@ -215,7 +215,7 @@ func (g *geminiCommand) runStreaming(message string) {
 		response, err := responseIterator.Next()
 		if err != nil {
 			if !errors.Is(err, iterator.Done) {
-				fmt.Print(Red(err.Error()))
+				fmt.Print(fileinfo.Red(err.Error()))
 			}
 			break
 		}

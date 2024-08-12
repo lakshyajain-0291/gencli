@@ -18,7 +18,7 @@ func indexFilesCmd(hs *fileinfo.HashSet) error {
 	// spinners.stop()
 
 	if err == nil {
-		fmt.Println("Indexing completed successfully.")
+		fmt.Println(fileinfo.Green("\nIndexing completed successfully.\n"))
 	}
 
 	return err
@@ -55,13 +55,13 @@ func indexFiles(hs *fileinfo.HashSet) error {
 		// 	Check if the directory exists
 		info, err := os.Stat(dir)
 		if os.IsNotExist(err) {
-			fmt.Printf("Directory %s does not exist. Please create it.\n", dir)
+			fmt.Println(fileinfo.Red(fmt.Sprintf("Directory %s does not exist. Please create it.\n", dir)))
 			continue
 		} else if err != nil {
-			fmt.Printf("Error checking directory %s: %v\n", dir, err)
+			fmt.Println(fileinfo.Red(fmt.Sprintf("Error checking directory %s: %v\n", dir, err)))
 			continue
 		} else if !info.IsDir() {
-			fmt.Printf("Path %s is not a directory.\n", dir)
+			fmt.Println(fileinfo.Red(fmt.Sprintf("Path %s is not a directory.\n", dir)))
 			continue
 		}
 
@@ -133,10 +133,11 @@ func indexFiles(hs *fileinfo.HashSet) error {
 			newFiles = append(newFiles, file)
 			hs.Add(fileHash) // Add hash to the set
 			// fmt.Printf("\nNot Skipping file %s\\%s\n", file.Directory, file.Name)
-		} else {
-			// fmt.Printf("\nSkipping file %s\\%s\n", file.Directory, file.Name)
-
 		}
+		// else {
+		// fmt.Printf("\nSkipping file %s\\%s\n", file.Directory, file.Name)
+
+		// }
 	}
 
 	//Generate descriptions using Gemini

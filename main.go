@@ -38,7 +38,7 @@ This versatile command-line interface is designed to enhance your file managemen
 -----------------------------------------------------------------------------------------------------------------`,
 		Version: version,
 		Run: func(cmd *cobra.Command, arg []string) {
-			fmt.Println("Welcome to gencli")
+			fmt.Println(fileinfo.Green("\nWelcome to GenCLI\n"))
 		},
 	}
 
@@ -50,13 +50,13 @@ This versatile command-line interface is designed to enhance your file managemen
 
 	err := rootCmd.Execute()
 	if err != nil {
-		fmt.Println(err)
+		fmt.Println(fileinfo.Red(err.Error()))
 		return 1
 	}
 
 	// Save the hash set to file at the end
 	if err := hashSet.SaveToFile(); err != nil {
-		fmt.Printf("Error saving hash set: %v\n", err)
+		fmt.Println(fileinfo.Red(fmt.Sprintf("Error saving hash set: %v\n\nPlease Configurate\n", err)))
 	}
 
 	return 0

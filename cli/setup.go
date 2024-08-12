@@ -7,6 +7,7 @@ import (
 	"os/user"
 	"strings"
 
+	"gemini_cli_tool/fileinfo"
 	"gemini_cli_tool/gemini"
 
 	"github.com/chzyer/readline"
@@ -22,7 +23,7 @@ type chatOpts struct {
 
 type chat struct {
 	session *gemini.Session
-	prompt  *prompt
+	prompt  *fileinfo.Prompt
 	reader  *readline.Instance
 	opts    *chatOpts
 }
@@ -80,9 +81,9 @@ func Newchat(user string, session *gemini.Session, opts *chatOpts) (*chat, error
 	}
 
 	// fmt.Println("Setting prompt...")
-	prompt := newPrompt(user)
+	prompt := fileinfo.NewPrompt(user)
 
-	reader.SetPrompt(prompt.user)
+	reader.SetPrompt(prompt.User)
 
 	if opts.Multiline {
 		reader.HistoryDisable()
@@ -138,12 +139,12 @@ func (c *chat) readMultiLine() (string, bool) {
 			break
 		}
 		if builder.Len() == 0 {
-			c.reader.SetPrompt(c.prompt.userNext)
+			c.reader.SetPrompt(c.prompt.UserNext)
 		}
 		builder.WriteString(input + "\n")
 	}
 
-	c.reader.SetPrompt(c.prompt.user)
+	c.reader.SetPrompt(c.prompt.User)
 	return validateInput(builder.String())
 
 }
@@ -177,7 +178,7 @@ func (c *chat) handleReadError(input string, err error) (string, bool) {
 
 		return "", false
 	}
-	fmt.Printf("%s%s\n", c.prompt.cli, err)
+	fmt.Printf("%s%s\n", c.prompt.Cli, err)
 	return "", false
 }
 

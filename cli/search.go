@@ -23,8 +23,7 @@ func searchFilesCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	fmt.Println("\nMost relevelent file is : ")
-	fmt.Printf("\nFile : %s\nDirectory : %s\nDescription : %s\n", file.Name, file.Directory, file.Description)
+	fmt.Printf("\n%s \n\n%s %s\n\n%s %s\\%s\n\n%s %s\n", fileinfo.Green("Most relevelent file is -"), fileinfo.Yellow("File :"), file.Name, fileinfo.Yellow("File path :"), file.Directory, file.Name, fileinfo.Yellow("Description :"), file.Description)
 
 	return nil
 }
@@ -77,12 +76,12 @@ func displayAllFiles() error {
 	}
 
 	if files == nil {
-		return fmt.Errorf("failed to find any files in index..index the files")
+		return fmt.Errorf("failed to find any files in index..ifileinfo.ndex the files")
 	}
 
 	for _, file := range files {
-		fmt.Printf("\n\n-File Name : %s \n", file.Name)
-		fmt.Printf("\n-Description : %s \n", file.Description)
+		fmt.Printf("\n%s %s\n\n%s %s\\%s\n\n%s %s\n", fileinfo.Yellow("File :"), file.Name, fileinfo.Yellow("File path :"), file.Directory, file.Name, fileinfo.Yellow("Description :"), file.Description)
+		fmt.Println(fileinfo.Cyan("----------------------------------------------------------------------------------------------------------------------------------\n"))
 	}
 
 	return nil
