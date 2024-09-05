@@ -28,6 +28,7 @@ func GetConfigDir() (string, error) {
 	}
 
 }
+
 func LoadIndex() ([]fileinfo.FileInfo, error) {
 
 	configDir, err := GetConfigDir()

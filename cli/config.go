@@ -93,12 +93,12 @@ func removeElements(slice []string, element string) []string {
 
 func LoadConfig() (*ConfigData, error) {
 
-	homeDir, err := os.UserHomeDir()
+	configDir, err := GetConfigDir()
 	if err != nil {
 		return nil, err
 	}
 
-	configPath := filepath.Join(homeDir, "gencli\\.gencli-config.json")
+	configPath := filepath.Join(configDir, ".gencli-config.json")
 	file, err := os.Open(configPath)
 	if err != nil {
 		return nil, err
@@ -116,17 +116,12 @@ func LoadConfig() (*ConfigData, error) {
 
 func SaveConfig(config *ConfigData) error {
 
-	homeDir, err := os.UserHomeDir()
+	configDir, err := GetConfigDir()
 	if err != nil {
 		return err
 	}
 
-	gencliDir := filepath.Join(homeDir, "gencli")
-	if err := os.MkdirAll(gencliDir, 0755); err != nil {
-		return err
-	}
-
-	configPath := filepath.Join(homeDir, "gencli\\.gencli-config.json")
+	configPath := filepath.Join(configDir, ".gencli-config.json")
 	file, err := os.Create(configPath)
 	if err != nil {
 		return err

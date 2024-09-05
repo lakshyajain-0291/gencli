@@ -43,12 +43,12 @@ func (hs *HashSet) Remove(hashString string) {
 }
 
 func (hs *HashSet) SaveToFile() error {
-	homeDir, err := os.UserHomeDir()
+	configDir, err := GetConfigDir()
 	if err != nil {
 		return err
 	}
 
-	hashesPath := filepath.Join(homeDir, "gencli\\.gencli-hashes.json")
+	hashesPath := filepath.Join(configDir, ".gencli-hashes.json")
 	file, err := os.Create(hashesPath)
 	if err != nil {
 		return err
@@ -64,12 +64,12 @@ func (hs *HashSet) SaveToFile() error {
 }
 
 func (hs *HashSet) LoadFromFile() error {
-	homeDir, err := os.UserHomeDir()
+	configDir, err := GetConfigDir()
 	if err != nil {
 		return err
 	}
 
-	hashesPath := filepath.Join(homeDir, "gencli\\.gencli-hashes.json")
+	hashesPath := filepath.Join(configDir, ".gencli-hashes.json")
 
 	file, err := os.Open(hashesPath)
 	if err != nil {
