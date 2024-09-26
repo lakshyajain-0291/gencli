@@ -22,24 +22,26 @@ func setConfig(addDirectories, deleteDirectories, addSkipTypes, deleteSkipTypes,
 	config, err := LoadConfig()
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			// if no addDirectories are provided adds current working directory (can also change this to root directory of system)
 			if len(addDirectories) == 0 {
 				cwd, err := os.Getwd()
 				if err != nil {
-					return fmt.Errorf("failed to get working directory : %w", err)
+					return fmt.Errorf("failed to get working directory: %w", err)
 				}
 				addDirectories = append(addDirectories, cwd)
 			}
-
 			config = &ConfigData{}
-
 		} else {
 			return err
 		}
 	}
 
-	if len(addDirectories) > 0 {
-		config.Directories = append(config.Directories, addDirectories...)
+	for _, dir := range addDirectories {
+		if _, err := os.Stat(dir); os.IsNotExist(err) {
+			return fmt.Errorf("directory does not exist: %s", dir)
+		}
+		if !contains(config.Directories, dir) {
+			config.Directories = append(config.Directories, dir)
+		}
 	}
 
 	for _, dir := range deleteDirectories {
@@ -62,8 +64,10 @@ func setConfig(addDirectories, deleteDirectories, addSkipTypes, deleteSkipTypes,
 		config.SkipFile = removeElements(config.SkipFile, fileName)
 	}
 
-	if len(addAPIKeys) > 0 {
-		config.APIKeys = append(config.APIKeys, addAPIKeys...)
+	for _, apiKey := range addAPIKeys {
+		if !contains(config.APIKeys, apiKey) {
+			config.APIKeys = append(config.APIKeys, apiKey)
+		}
 	}
 
 	for _, api := range deleteAPIKeys {
@@ -75,11 +79,21 @@ func setConfig(addDirectories, deleteDirectories, addSkipTypes, deleteSkipTypes,
 	}
 
 	if err := SaveConfig(config); err != nil {
-		return fmt.Errorf("failed to save config : %w", err)
+		return fmt.Errorf("failed to save config: %w", err)
 	}
 
 	fmt.Println(fileinfo.Green("Configurations Saved Successfully"))
 	return nil
+}
+
+// Helper function to check if a slice contains a specific string
+func contains(slice []string, item string) bool {
+	for _, v := range slice {
+		if v == item {
+			return true
+		}
+	}
+	return false
 }
 
 func removeElements(slice []string, element string) []string {

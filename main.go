@@ -56,7 +56,7 @@ This versatile command-line interface is designed to enhance your file managemen
 
 	// Save the hash set to file at the end
 	if err := hashSet.SaveToFile(); err != nil {
-		fmt.Println(fileinfo.Red(fmt.Sprintf("Error saving hash set: %v\n\nPlease Configurate\n", err)))
+		fmt.Println(fileinfo.Red(fmt.Sprintf("\nError saving hash set: %v\n\nPlease Config First\n", err)))
 	}
 
 	return 0

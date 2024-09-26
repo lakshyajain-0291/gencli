@@ -1,22 +1,7 @@
-# This is an example .goreleaser.yml file with some sensible defaults.
-# Make sure to check the documentation at https://goreleaser.com
-
-# The lines below are called `modelines`. See `:help modeline`
-# Feel free to remove those if you don't want/need to use them.
-# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
-# vim: set ts=2 sw=2 tw=0 fo=cnqoj
-
 version: 2
 
-before:
-  hooks:
-    # You may remove this if you don't use go modules.
-    - go mod tidy
-    # you may remove this if you don't need go generate
-    - go generate ./...
-
 builds:
-  - main: ./main
+  - main: ./main.go
     id: "gencli"
     binary: ./bin/gencli
     env:
@@ -29,7 +14,6 @@ builds:
         {{- if eq .Os "windows" }}
           {{- if eq .Arch "amd64" }}CC=x86_64-w64-mingw32-gcc{{- end }}
         {{- end }}
-
     goos:
       - linux
       - windows
@@ -37,21 +21,19 @@ builds:
     goarch:
       - amd64
       - arm64
-    flags: 
-      - -mod=vendor
     ldflags:
-      - -X github.com/AISocietyIITJ/gencli/pkg.Version={{ .Version }}
-    igmore: 
+      - -X github.com/lakshyajain-0291/gencli/pkg.Version={{ .Version }}
+    ignore: 
       - goos: windows
       - goarch: arm64
 
-checksums:
+checksum:
   name_template: "checksums.txt"
 
 nfpms:
   - package_name: gencli
-    vendor: AISocietyIITJ
-    homepage: https://github.com/AISocietyIITJ/gencli
+    vendor: lakshyajain-0291
+    homepage: https://github.com/lakshyajain-0291/gencli
     maintainer: Lakshya Jain <lakshyajainrj19@gmail.com>
     license: MIT
     formats:
@@ -69,21 +51,13 @@ nfpms:
 release:
   prerelease: auto
   github:
-    owner: AISocietyIITJ
+    owner: lakshyajain-0291
     name: gencli
   name_template: "{{.ProjectName}}-v{{.Version}}"
 
-archives:
-  - wrap_in_directory: false
-    format_overrides:
-      - goos: windows
-        format: zip
-    files:
-      - LICENSE
-      - README.md
 aurs:
   - name: gencli-bin
-    homepage: https://github.com/AISocietyIITJ/gencli
+    homepage: https://github.com/lakshyajain-0291/gencli
     description: "GenCLI - A Gemini-Powered interactable CLI for fast, accurate file search."
     license: MIT
     maintainers:
@@ -102,38 +76,49 @@ aurs:
 
 brews:
   - name: gencli
-    url_template: "https://github.com/AISocietyIITJ/gencli/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
+    url_template: "https://github.com/lakshyajain-0291/gencli/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
     download_strategy: CurlDownloadStrategy
     commit_author:
       name: lakshyajain-0291
       email: lakshyajainrj19@gmail.com
     commit_msg_template: "Brew formula update for gencli version {{ .Tag }}"
-    homepage: "https://github.com/AISocietyIITJ/gencli"
+    homepage: "https://github.com/lakshyajain-0291/gencli"
     description: "GenCLI - A Gemini-Powered interactable CLI for fast, accurate file search."
     license: "MIT"
     skip_upload: false
     install: |
         bin.install "bin/gencli"
     repository:
-      owner: AISocietyIITJ
+      owner: lakshyajain-0291
       name: homebrew-gencli
       branch: main
       pull_request:
         enabled: false
 
+archives:
+  - format: zip
+    name_template: "{{ .Binary }}_{{ .Tag }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - LICENSE
+      - README.md
+    format_overrides:
+      - goos: windows
+        format: zip
+    id: windows-archive
+
 scoops:
   - name: gencli
-    url_template: "https://github.com/AISocietyIITJ/gencli/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
+    url_template: "https://github.com/lakshyajain-0291/gencli/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
     commit_author:
       name: lakshyajain-0291
       email: lakshyajainrj19@gmail.com
     commit_msg_template: "Scoop update for {{ .ProjectName }} version {{ .Tag }}"
-    homepage: "https://github.com/AISocietyIITJ/gencli"
+    homepage: "https://github.com/lakshyajain-0291/gencli"
     description: "GenCLI - A Gemini-Powered interactable CLI for fast, accurate file search."
     license: MIT
     skip_upload: false
     repository:
-      owner: AISocietyIITJ
+      owner: lakshyajain-0291
       name: scoop-gencli
       branch: main
       pull_request:

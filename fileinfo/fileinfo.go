@@ -15,19 +15,24 @@ func GetConfigDir() (string, error) {
 		return "", err
 	}
 
+	var configDir string
+
 	switch runtime.GOOS {
 	case "windows":
-		configDir := filepath.Join(homedir, "Appdata", "Local", "gencli")
-		return configDir, nil
+		configDir = filepath.Join(homedir, "Appdata", "Local", "gencli")
 	case "darwin":
-		configDir := filepath.Join(homedir, "Library", "Application Support", "gencli")
-		return configDir, nil
+		configDir = filepath.Join(homedir, "Library", "Application Support", "gencli")
 	default:
-		configDir := filepath.Join(homedir, ".config", "gencli")
-		return configDir, nil
+		configDir = filepath.Join(homedir, ".config", "gencli")
 
 	}
 
+	err = os.MkdirAll(configDir, 0755)
+	if err != nil {
+		return "", err
+	}
+
+	return configDir, nil
 }
 
 type FileInfo struct {
