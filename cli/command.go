@@ -45,7 +45,7 @@ func NewConfigCommand() *cobra.Command {
 	cmd.Flags().StringSliceVar(&deleteSkipTypes, "del-skiptypes", []string{}, "List of file types to stop skipping during indexing")
 	cmd.Flags().StringSliceVar(&addSkipFiles, "add-skipfiles", []string{}, "List of files to skip during indexing")
 	cmd.Flags().StringSliceVar(&deleteSkipFiles, "del-skipfiles", []string{}, "List of files to stop skipping during indexing")
-	cmd.Flags().Float32VarP(&relevanceIndex, "relindex", "r", 0.8, "Relevance Value used during Indexing")
+	cmd.Flags().Float32VarP(&relevanceIndex, "relindex", "r", 0.35, "Relevance Value used during Indexing")
 	cmd.Flags().BoolVarP(&showConfig, "show-config", "s", false, "Show the current configuration")
 	cmd.Flags().StringSliceVar(&addAPIKeys, "add-apikeys", []string{}, "List of API keys to add")
 	cmd.Flags().StringSliceVar(&deleteAPIKeys, "del-apikeys", []string{}, "List of API keys to remove")

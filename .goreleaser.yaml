@@ -106,20 +106,20 @@ archives:
         format: zip
     id: windows-archive
 
-scoops:
-  - name: gencli
-    url_template: "https://github.com/lakshyajain-0291/gencli/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
-    commit_author:
-      name: lakshyajain-0291
-      email: lakshyajainrj19@gmail.com
-    commit_msg_template: "Scoop update for {{ .ProjectName }} version {{ .Tag }}"
-    homepage: "https://github.com/lakshyajain-0291/gencli"
-    description: "GenCLI - A Gemini-Powered interactable CLI for fast, accurate file search."
-    license: MIT
-    skip_upload: false
-    repository:
-      owner: lakshyajain-0291
-      name: scoop-gencli
-      branch: main
-      pull_request:
-        enabled: false
+# scoops:
+#   - name: gencli
+#     url_template: "https://github.com/lakshyajain-0291/gencli/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
+#     commit_author:
+#       name: lakshyajain-0291
+#       email: lakshyajainrj19@gmail.com
+#     commit_msg_template: "Scoop update for {{ .ProjectName }} version {{ .Tag }}"
+#     homepage: "https://github.com/lakshyajain-0291/gencli"
+#     description: "GenCLI - A Gemini-Powered interactable CLI for fast, accurate file search."
+#     license: MIT
+#     skip_upload: false
+#     repository:
+#       owner: lakshyajain-0291
+#       name: scoop-gencli
+#       branch: main
+#       pull_request:
+#         enabled: false

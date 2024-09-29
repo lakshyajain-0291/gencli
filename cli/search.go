@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"gemini_cli_tool/fileinfo"
 	"gemini_cli_tool/gemini"
+	"os/exec"
+	"runtime"
 
 	"github.com/spf13/cobra"
 )
@@ -25,7 +27,30 @@ func searchFilesCmd(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("\n%s \n\n%s %s\n\n%s %s\\%s\n\n%s %s\n", fileinfo.Green("Most relevelent file is -"), fileinfo.Yellow("File :"), file.Name, fileinfo.Yellow("File path :"), file.Directory, file.Name, fileinfo.Yellow("Description :"), file.Description)
 
+	filePath := file.Directory + "\\" + file.Name
+
+	err = openFile(filePath)
+	if err != nil {
+		return fmt.Errorf("failed to open the file: %v", err)
+	}
+
 	return nil
+}
+
+func openFile(filePath string) error {
+	switch runtime.GOOS {
+	case "windows":
+		// On Windows, use "explorer" to open the file in its associated application
+		return exec.Command("explorer", filePath).Start()
+	case "darwin":
+		// On macOS, use "open" command
+		return exec.Command("open", filePath).Start()
+	case "linux":
+		// On Linux, use "xdg-open" command
+		return exec.Command("xdg-open", filePath).Start()
+	default:
+		return fmt.Errorf("unsupported platform")
+	}
 }
 
 func searchFiles(query string) (*fileinfo.FileInfo, error) {
