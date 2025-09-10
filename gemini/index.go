@@ -98,9 +98,18 @@ func GenerateDescriptions(files []fileinfo.FileInfo, apiKeys []string, hs *filei
 				}
 
 				for i, file := range batch {
-					file.Description = resultBatch[i].Description
-					resultCh <- file
-				}
+    if i < len(resultBatch) {
+        file.Description = resultBatch[i].Description
+    } else {
+        fmt.Printf(
+            "⚠️ Mismatch: batch size = %d, but resultBatch size = %d (index %d out of range)\n",
+            len(batch), len(resultBatch), i,
+        )
+        file.Description = "Description unavailable"
+    }
+    resultCh <- file
+}
+
 			}
 			// fmt.Printf("Goroutine %d finished\n", id)
 		}(i)
