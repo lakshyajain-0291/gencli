@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"gemini_cli_tool/fileinfo"
 	"os"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -98,8 +99,19 @@ func (c *systemCommand) run(message string) bool {
 			if err != nil {
 				c.print(err.Error())
 			} else {
-				c.print("Most relevelent file is : ")
+				c.print("Most relevant file is : ")
 				c.print(fmt.Sprintf("\nFile : %s\nDirectory : %s\nDescription : %s\n", file.Name, file.Directory, file.Description))
+				c.print(("Do you want to open this file? (y/n): "))
+
+				var response string
+				fmt.Scanln(&response)
+
+				if strings.ToLower(response) == "y" {
+					err = OpenFileWithDefaultApp(file.Directory)
+					if err != nil {
+						c.print(fmt.Sprintf("Failed to open file: %v", err))
+					}
+				}
 			}
 
 		} else {
@@ -112,6 +124,38 @@ func (c *systemCommand) run(message string) bool {
 
 func (c *systemCommand) print(message string) {
 	fmt.Printf("%s%s\n\n", c.chat.prompt.Cli, message)
+}
+
+// OpenFileWithDefaultApp opens the file with the default application based on OS.
+func OpenFileWithDefaultApp(path string) error {
+	var cmd string
+	var args []string
+
+	switch {
+	case strings.Contains(strings.ToLower(os.Getenv("OS")), "windows"):
+		cmd = "cmd"
+		args = []string{"/c", "start", "", path}
+	case strings.Contains(strings.ToLower(os.Getenv("XDG_SESSION_TYPE")), "wayland") ||
+		strings.Contains(strings.ToLower(os.Getenv("XDG_SESSION_TYPE")), "x11") ||
+		os.Getenv("DISPLAY") != "":
+		cmd = "xdg-open"
+		args = []string{path}
+	case os.Getenv("TERM_PROGRAM") == "Apple_Terminal" || os.Getenv("OSTYPE") == "darwin":
+		cmd = "open"
+		args = []string{path}
+	default:
+		// Try xdg-open as a fallback
+		cmd = "xdg-open"
+		args = []string{path}
+	}
+
+	return execCommand(cmd, args...)
+}
+
+func execCommand(name string, arg ...string) error {
+	// fmt.Printf("Executing command: %s %s\n", name, strings.Join(arg, " "))
+	cmd := exec.Command(name, arg...)
+	return cmd.Start()
 }
 
 type geminiCommand struct {
