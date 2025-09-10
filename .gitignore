@@ -17,6 +17,8 @@
 # Go workspace file
 go.work
 
+gencli
+
 #env file
 .env
 
