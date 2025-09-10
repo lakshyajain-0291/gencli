@@ -20,12 +20,14 @@ func NewConfigCommand() *cobra.Command {
 	var showConfig bool
 	var addAPIKeys []string
 	var deleteAPIKeys []string
+	var fileEdit bool
 
 	cmd := &cobra.Command{
 		Use:   "config",
 		Short: "Set configurations for indexing",
 
 		RunE: func(cmd *cobra.Command, args []string) error {
+
 			if showConfig {
 				config, err := LoadConfig()
 				if err != nil {
@@ -35,6 +37,13 @@ func NewConfigCommand() *cobra.Command {
 				showConfigFormatted(config)
 				return nil
 			}
+
+			if fileEdit {
+				fmt.Println(fileinfo.Yellow("Opening configuration file for editing..."))
+				EditConfig()
+				return nil
+			}
+
 			return setConfig(addDirectories, deleteDirectories, addSkipTypes, deleteSkipTypes, addSkipFiles, deleteSkipFiles, addAPIKeys, deleteAPIKeys, relevanceIndex)
 		},
 	}
@@ -49,6 +58,7 @@ func NewConfigCommand() *cobra.Command {
 	cmd.Flags().BoolVarP(&showConfig, "show-config", "s", false, "Show the current configuration")
 	cmd.Flags().StringSliceVar(&addAPIKeys, "add-apikeys", []string{}, "List of API keys to add")
 	cmd.Flags().StringSliceVar(&deleteAPIKeys, "del-apikeys", []string{}, "List of API keys to remove")
+	cmd.Flags().BoolVarP(&fileEdit, "edit", "e", false, "Open the configuration file in an editor")
 
 	return cmd
 }
