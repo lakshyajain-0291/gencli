@@ -82,7 +82,7 @@ func GenerateDescriptions(files []fileinfo.FileInfo, apiKeys []string, hs *filei
 	close(fileCh)
 
 	var wg sync.WaitGroup
-	// fmt.Println("Starting concurrent processing with", maxConcurrentRequests, "goroutines")
+	fmt.Println("Starting concurrent processing with", maxConcurrentRequests, "goroutines")
 
 	for i := 0; i < maxConcurrentRequests; i++ {
 		wg.Add(1)
@@ -117,7 +117,7 @@ func GenerateDescriptions(files []fileinfo.FileInfo, apiKeys []string, hs *filei
 
 	wg.Wait()
 	close(resultCh)
-	// fmt.Println("All goroutines have finished processing")
+	fmt.Println("All goroutines have finished processing")
 
 	for file := range resultCh {
 		processedFiles = append(processedFiles, file)
@@ -136,12 +136,12 @@ func GenerateDescriptions(files []fileinfo.FileInfo, apiKeys []string, hs *filei
 
 func GenerateBatchDescription(sessions []*Session, batch []fileinfo.FileInfo) ([]fileinfo.FileInfo, error) {
 
-	// fmt.Print("length of each batch :", len(batch))
+	fmt.Print("length of each batch :", len(batch))
 	var resultBatch []fileinfo.FileInfo
 
 	for i, file := range batch {
 		session := sessions[i]
-		model := session.client.GenerativeModel("gemini-1.5-flash")
+		model := session.client.GenerativeModel("gemini-2.5-flash")
 
 		prompt, err := GeneratePrompt(session, &file)
 		if err != nil {
@@ -152,10 +152,10 @@ func GenerateBatchDescription(sessions []*Session, batch []fileinfo.FileInfo) ([
 
 		resp, err := model.GenerateContent(session.ctx, prompt...)
 		if err != nil {
-			// fmt.Printf("%w", err.(*apierror.APIError))
-			// fmt.Printf("Error generating content from Gemini: %v\n", err)
+			fmt.Printf("%w", err.(*apierror.APIError))
+			fmt.Printf("Error generating content from Gemini: %v\n", err)
 			if apiErr, ok := err.(*apierror.APIError); ok {
-				// fmt.Printf("\n||%d", apiErr.HTTPCode())
+				fmt.Printf("\n||%d", apiErr.HTTPCode())
 				if apiErr.HTTPCode() == http.StatusTooManyRequests {
 					err = retryWithBackoff(func() error {
 						var retryErr error
@@ -177,7 +177,7 @@ func GenerateBatchDescription(sessions []*Session, batch []fileinfo.FileInfo) ([
 			}
 		}
 
-		// fmt.Print("respose of file ", file.Name, " is ", resp.Candidates[0].Content.Parts[0])
+		fmt.Print("respose of file ", file.Name, " is ", resp.Candidates[0].Content.Parts[0])
 		if len(resp.Candidates) > 0 && resp.Candidates[0].Content != nil {
 			var builder strings.Builder
 
@@ -264,7 +264,7 @@ func timeOut(duration time.Duration, fn func() ([]genai.Part, error)) ([]genai.P
 func getDefaultPrompt(file fileinfo.FileInfo) ([]genai.Part, error) {
 	filePath := filepath.Join(file.Directory, file.Name)
 
-	// model := session.client.GenerativeModel("gemini-1.5-flash")
+	// model := session.client.GenerativeModel("gemini-2.5-flash")
 	prompt := []genai.Part{
 		genai.Text(fmt.Sprintf("Using your comprehensive knowledge, generate a detailed and informative description in less than 200 words that accurately summarizes the content and purpose of this file. Consider all available metadata and context to provide insights into what this file is, its potential use, and its significance. Use the following metadata to guide your description:\n\n- File Id: %d\n- File Path: %s\n- File Size: %d bytes\n- Last Modified: %v\n\nPlease ensure the description is concise yet thorough.", file.Id, filePath, file.Size, file.ModifiedTime)),
 	}
@@ -494,7 +494,7 @@ func uploadVideo(session *Session, trimmedFilePath string, file fileinfo.FileInf
 func processUploadedVideo(file fileinfo.FileInfo, uploadedFile *genai.File) ([]genai.Part, error) {
 	// filePath := filepath.Join(file.Directory, file.Name)
 
-	// model := session.client.GenerativeModel("gemini-1.5-flash")
+	// model := session.client.GenerativeModel("gemini-2.5-flash")
 	prompt := []genai.Part{
 		genai.FileData{URI: uploadedFile.URI},
 		genai.Text(fmt.Sprintf("Generate a well-rounded description in less than 200 words about what this video file likely depicts and its possible purpose. Use your knowledge to interpret the content and any associated metadata. The file Id is %d\n- File Name: %s\n- File Size: %d bytes\n- Last Modified: %v\n\n", file.Id, file.Name, file.Size, file.ModifiedTime)),
