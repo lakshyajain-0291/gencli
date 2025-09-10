@@ -22,7 +22,7 @@ func NewchatSession(ctx context.Context, apiKey string) (*Session, error) {
 	return &Session{
 		ctx:     ctx,
 		client:  client,
-		session: client.GenerativeModel("gemini-1.5-flash").StartChat(),
+		session: client.GenerativeModel("gemini-2.5-flash").StartChat(),
 	}, nil
 }
 
