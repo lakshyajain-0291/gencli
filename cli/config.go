@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"gemini_cli_tool/fileinfo"
 	"os"
+	"os/exec"
 	"path/filepath"
 )
 
@@ -105,6 +106,56 @@ func removeElements(slice []string, element string) []string {
 	return slice
 }
 
+func EditConfig() error {
+	configDir, err := GetConfigDir()
+	if err != nil {
+		fmt.Println(fileinfo.Red("Failed to get config directory."))
+		return err
+	}
+
+	fmt.Println(fileinfo.Green("Opening configuration file for editing..."))
+
+	configPath := filepath.Join(configDir, ".gencli-config.json")
+	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+		fmt.Println(fileinfo.Red("Config file does not exist."))
+		return err
+	}
+
+	fmt.Printf("Config file path: %s\n", configPath)
+
+	// Try to determine the default editor
+	editor := os.Getenv("EDITOR")
+	if editor == "" {
+		// Try common editors if EDITOR environment variable is not set
+		possibleEditors := []string{"nano", "vim", "vi", "notepad", "code", "gedit"}
+		for _, e := range possibleEditors {
+			path, err := exec.LookPath(e)
+			if err == nil {
+				editor = path
+				break
+			}
+		}
+		
+		if editor == "" {
+			return fmt.Errorf("no editor found, please set the EDITOR environment variable")
+		}
+	}
+
+	// Prepare the command to open the file with the editor
+	cmd := exec.Command(editor, configPath)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	// Run the editor
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to open editor: %w", err)
+	}
+
+	fmt.Println(fileinfo.Green("Configuration file edited successfully."))
+	// fmt.Println(fileinfo.Yellow("If the file does not open, please ensure you have 'nano' installed or modify the code to use your preferred editor."))
+	return nil
+}
 func LoadConfig() (*ConfigData, error) {
 
 	configDir, err := GetConfigDir()
