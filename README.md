@@ -19,7 +19,7 @@
 
 ## 🌟 Overview
 
-GenCLI is a revolutionary CLI tool powered by Gemini-1.5-flash, designed to transform how you interact with and manage your files. By leveraging advanced AI capabilities, GenCLI provides intelligent file indexing, searching, and interactive chat functionalities.
+GenCLI is a revolutionary CLI tool powered by gemini-2.5-flash, designed to transform how you interact with and manage your files. By leveraging advanced AI capabilities, GenCLI provides intelligent file indexing, searching, and interactive chat functionalities.
 
 ## 🚀 Key Features
 
